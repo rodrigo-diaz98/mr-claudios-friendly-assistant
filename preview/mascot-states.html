@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Session Assistant mascot states</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; background: #14181b; color: #eceae4; margin: 0; padding: 24px; }
+    h1 { font-size: 16px; font-weight: 600; margin: 0 0 16px; }
+    .grid { display: grid; grid-template-columns: repeat(2, 240px); gap: 16px; }
+    .card { background: #1b2024; border: 1px solid #2c3236; border-radius: 10px; padding: 16px; }
+    .stage { height: 110px; display: flex; align-items: center; justify-content: center; }
+    svg { width: 150px; height: 112px; overflow: visible; }
+    .label { font-size: 13px; margin-top: 8px; }
+    .label span { color: #96a0a6; font-size: 12px; }
+    .body { fill: #d97757; }
+    .eye { fill: #14181b; transform-box: fill-box; transform-origin: center; }
+    .leg, .arm { fill: #d97757; }
+    .bubble { opacity: 0; }
+    .zzz { fill: #96a0a6; font-family: ui-monospace, Menlo, monospace; font-weight: 700; opacity: 0; }
+    .bob { transform-box: fill-box; transform-origin: 50% 100%; }
+
+    .sleeping .body, .sleeping .leg, .sleeping .arm { fill: #6e7781; }
+    .sleeping .eye { transform: scaleY(0.12); }
+    .sleeping .bob { animation: breathe 3.2s ease-in-out infinite; }
+    .sleeping .zzz { animation: rise 2.8s ease-in infinite; }
+    .sleeping .zzz.two { animation-delay: 1.4s; }
+
+    .running .bob { animation: bounce 0.45s ease-in-out infinite; }
+    .running .leg.a { animation: stride 0.45s ease-in-out infinite; }
+    .running .leg.b { animation: stride 0.45s ease-in-out infinite reverse; }
+    .running .arm.a { animation: swing 0.45s ease-in-out infinite; }
+    .running .arm.b { animation: swing 0.45s ease-in-out infinite reverse; }
+    .running .dust { fill: #3fb950; opacity: 0; animation: puff 0.9s ease-out infinite; }
+
+    .finished .bob { animation: hop 1.3s ease-out infinite; }
+    .finished .bubble { fill: #d9b84d; animation: pop 1.3s ease-out infinite; }
+    .finished .check { stroke: #14181b; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; animation: pop 1.3s ease-out infinite; }
+    .finished .arm.a { animation: wave 1.3s ease-in-out infinite; }
+
+    .waiting .bob { animation: shake 0.6s ease-in-out infinite; }
+    .waiting .bubble { fill: #e8833a; animation: pulse 1.2s ease-in-out infinite; }
+    .waiting .question { fill: #14181b; font-family: ui-monospace, Menlo, monospace; font-weight: 700; font-size: 16px; }
+
+    @keyframes breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.04); } }
+    @keyframes rise { 0% { transform: translate(0, 0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(6px, -16px); opacity: 0; } }
+    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+    @keyframes stride { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+    @keyframes swing { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-14deg); } }
+    @keyframes puff { 0% { opacity: 0.8; transform: translate(0, 0); } 100% { opacity: 0; transform: translate(-10px, 2px); } }
+    @keyframes hop { 0%, 100% { transform: translateY(0); } 15% { transform: translateY(-10px); } 30% { transform: translateY(0); } 40% { transform: translateY(-3px); } 50% { transform: translateY(0); } }
+    @keyframes wave { 0%, 100% { transform: rotate(0deg); } 30% { transform: rotate(-30deg); } 60% { transform: rotate(10deg); } }
+    @keyframes pop { 0%, 20% { opacity: 0; transform: scale(0.6); } 35%, 75% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.6); } }
+    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+    @keyframes shake { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-4deg); } 75% { transform: rotate(4deg); } }
+  </style>
+</head>
+<body>
+  <h1>Mascot states</h1>
+  <div class="grid">
+
+    <div class="card">
+      <div class="stage">
+        <svg viewBox="0 0 80 60" class="sleeping">
+          <g class="bob">
+            <rect class="arm" x="7" y="22" width="6" height="12"/>
+            <rect class="arm" x="67" y="22" width="6" height="12"/>
+            <rect class="body" x="13" y="10" width="54" height="28"/>
+            <rect class="eye" x="19" y="22" width="6" height="6"/>
+            <rect class="eye" x="55" y="22" width="6" height="6"/>
+            <rect class="leg" x="13" y="38" width="6" height="10"/>
+            <rect class="leg" x="25" y="38" width="6" height="10"/>
+            <rect class="leg" x="49" y="38" width="6" height="10"/>
+            <rect class="leg" x="61" y="38" width="6" height="10"/>
+          </g>
+          <text class="zzz" x="70" y="10" font-size="10">z</text>
+          <text class="zzz two" x="75" y="4" font-size="8">z</text>
+        </svg>
+      </div>
+      <div class="label">1. Sleeping <span>grey: idle, nothing to do</span></div>
+    </div>
+
+    <div class="card">
+      <div class="stage">
+        <svg viewBox="0 0 80 60" class="running">
+          <g class="bob">
+            <rect class="arm a" x="7" y="22" width="6" height="12"/>
+            <rect class="arm b" x="67" y="22" width="6" height="12"/>
+            <rect class="body" x="13" y="10" width="54" height="28"/>
+            <rect class="eye" x="19" y="22" width="6" height="6"/>
+            <rect class="eye" x="55" y="22" width="6" height="6"/>
+            <rect class="leg a" x="13" y="38" width="6" height="10"/>
+            <rect class="leg b" x="25" y="38" width="6" height="10"/>
+            <rect class="leg a" x="49" y="38" width="6" height="10"/>
+            <rect class="leg b" x="61" y="38" width="6" height="10"/>
+          </g>
+          <rect class="dust" x="4" y="50" width="6" height="4"/>
+        </svg>
+      </div>
+      <div class="label">2. Running <span>green: legs stride</span></div>
+    </div>
+
+    <div class="card">
+      <div class="stage">
+        <svg viewBox="0 0 80 60" class="finished">
+          <g class="bob">
+            <rect class="arm a" x="7" y="22" width="6" height="12"/>
+            <rect class="arm b" x="67" y="22" width="6" height="12"/>
+            <rect class="body" x="13" y="10" width="54" height="28"/>
+            <rect class="eye" x="19" y="22" width="6" height="6"/>
+            <rect class="eye" x="55" y="22" width="6" height="6"/>
+            <rect class="leg" x="13" y="38" width="6" height="10"/>
+            <rect class="leg" x="25" y="38" width="6" height="10"/>
+            <rect class="leg" x="49" y="38" width="6" height="10"/>
+            <rect class="leg" x="61" y="38" width="6" height="10"/>
+          </g>
+          <circle class="bubble" cx="72" cy="8" r="7"/>
+          <path class="check" d="M67 8 L71 12 L78 4"/>
+        </svg>
+      </div>
+      <div class="label">3. Finished <span>yellow: hops, check bubble, waves</span></div>
+    </div>
+
+    <div class="card">
+      <div class="stage">
+        <svg viewBox="0 0 80 60" class="waiting">
+          <g class="bob">
+            <rect class="arm a" x="7" y="22" width="6" height="12"/>
+            <rect class="arm b" x="67" y="22" width="6" height="12"/>
+            <rect class="body" x="13" y="10" width="54" height="28"/>
+            <rect class="eye" x="19" y="22" width="6" height="6"/>
+            <rect class="eye" x="55" y="22" width="6" height="6"/>
+            <rect class="leg" x="13" y="38" width="6" height="10"/>
+            <rect class="leg" x="25" y="38" width="6" height="10"/>
+            <rect class="leg" x="49" y="38" width="6" height="10"/>
+            <rect class="leg" x="61" y="38" width="6" height="10"/>
+          </g>
+          <circle class="bubble" cx="72" cy="8" r="7"/>
+          <text class="question" x="69" y="14">?</text>
+        </svg>
+      </div>
+      <div class="label">4. Needs you <span>orange: shakes, pulsing question bubble</span></div>
+    </div>
+
+  </div>
+</body>
+</html>

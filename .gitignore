@@ -1,0 +1,4 @@
+node_modules/
+hook-payloads.jsonl
+*.app/
+.DS_Store

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Mascot hat options</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; background: #14181b; color: #eceae4; margin: 0; padding: 24px; }
+    h1 { font-size: 16px; font-weight: 600; margin: 0 0 6px; }
+    h2 { font-size: 13px; font-weight: 600; color: #96a0a6; margin: 22px 0 10px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 200px); gap: 14px; }
+    .card { background: #1b2024; border: 1px solid #2c3236; border-radius: 10px; padding: 12px; text-align: center; }
+    svg { width: 150px; height: 112px; }
+    .label { font-size: 13px; margin-top: 6px; }
+    .label span { color: #96a0a6; font-size: 12px; display: block; }
+    .body { fill: #d97757; }
+    .eye { fill: #14181b; }
+    .leg, .arm { fill: #d97757; }
+    .sleep-body { fill: #6e7781; }
+  </style>
+</head>
+<body>
+  <h1>Hat options</h1>
+  <h2>Hat styles</h2>
+  <div id="styles" class="grid"></div>
+  <h2>Proposed hat per state</h2>
+  <div id="states" class="grid"></div>
+
+  <script>
+    const bodyParts = (bodyColor) => `
+      <rect class="arm" x="7" y="22" width="6" height="12" fill="${bodyColor}"/>
+      <rect class="arm" x="67" y="22" width="6" height="12" fill="${bodyColor}"/>
+      <rect x="13" y="10" width="54" height="28" fill="${bodyColor}"/>
+      <rect x="13" y="38" width="6" height="10" fill="${bodyColor}"/>
+      <rect x="25" y="38" width="6" height="10" fill="${bodyColor}"/>
+      <rect x="49" y="38" width="6" height="10" fill="${bodyColor}"/>
+      <rect x="61" y="38" width="6" height="10" fill="${bodyColor}"/>
+      <rect class="eye" x="19" y="22" width="6" height="6"/>
+      <rect class="eye" x="55" y="22" width="6" height="6"/>`;
+
+    const hats = {
+      topHat: `<rect x="23" y="-10" width="34" height="18" fill="#14181b"/>
+               <rect x="23" y="4" width="34" height="3" fill="#e8833a"/>
+               <rect x="14" y="7" width="52" height="4" fill="#14181b"/>`,
+      partyCone: `<polygon points="40,-14 29,10 51,10" fill="#d9b84d"/>
+                  <circle cx="40" cy="-2" r="2" fill="#e8833a"/>
+                  <circle cx="45" cy="4" r="1.6" fill="#3fb950"/>`,
+      cap: `<rect x="20" y="-2" width="40" height="12" rx="4" fill="#4a6fa5"/>
+            <rect x="11" y="8" width="20" height="3" fill="#4a6fa5"/>`,
+      crown: `<polygon points="20,10 15,-3 28,3 40,-6 52,3 65,-3 60,10" fill="#d9b84d"/>`,
+      nightcap: `<path d="M18 10 Q28 -12 52 -4 Q58 -2 60 6 L64 10 Z" fill="#4a6fa5"/>
+                 <circle cx="62" cy="-4" r="4" fill="#eceae4"/>`,
+      headband: `<rect x="13" y="6" width="54" height="4" fill="#e8833a"/>
+                 <path d="M60 10 L66 14 L64 18" stroke="#3fb950" stroke-width="2" fill="none"/>`,
+      siren: `<rect x="32" y="2" width="16" height="8" rx="2" fill="#14181b"/>
+              <rect x="34" y="-4" width="12" height="6" rx="3" fill="#e8833a"/>`,
+    };
+
+    const svgFor = (hatMarkup, bodyColor = '#d97757') => `
+      <svg viewBox="0 -16 80 76">${hatMarkup}${bodyParts(bodyColor)}</svg>`;
+
+    const cardFor = (title, subtitle, markup) => `
+      <div class="card">${markup}<div class="label">${title}<span>${subtitle}</span></div></div>`;
+
+    document.getElementById('styles').innerHTML = [
+      cardFor('Top hat', 'classic, formal', svgFor(hats.topHat)),
+      cardFor('Party cone', 'celebratory', svgFor(hats.partyCone)),
+      cardFor('Cap', 'casual', svgFor(hats.cap)),
+      cardFor('Crown', 'premium', svgFor(hats.crown)),
+    ].join('');
+
+    document.getElementById('states').innerHTML = [
+      cardFor('Sleeping: nightcap', 'grey body, cap tilts with breathing', svgFor(hats.nightcap, '#6e7781')),
+      cardFor('Running: headband', 'orange band, stays still while legs move', svgFor(hats.headband)),
+      cardFor('Finished: party cone', 'pops up, then bounces', svgFor(hats.partyCone)),
+      cardFor('Needs you: siren', 'light flashes on top, matches the orange circle', svgFor(hats.siren)),
+    ].join('');
+  </script>
+</body>
+</html>

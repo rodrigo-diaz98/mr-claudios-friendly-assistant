@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mr Claudio Session Assistant</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 12px; background: #22292e; color: #eceae4; font-size: 13px; }
+    header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .light { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+    .light.green { background: #3fb950; }
+    .light.yellow { background: #d9b84d; }
+    .light.orange { background: #e8833a; }
+    .light.grey { background: #6e7781; }
+    h1 { font-size: 14px; margin: 0; font-weight: 600; }
+    .general-light { width: 16px; height: 16px; }
+    .general-light.orange { animation: flash 0.9s ease-in-out infinite; }
+    @keyframes flash { 0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px rgba(232, 131, 58, 0.7); } 50% { opacity: 0.25; box-shadow: none; } }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; padding: 9px 2px; border-bottom: 1px solid #2c3236; }
+    .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .last-message { font-size: 12px; color: #b9c0c6; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .meta { font-size: 11px; color: #96a0a6; margin-top: 2px; }
+    .open-button { font-size: 12px; color: #eceae4; background: #2c3236; border-radius: 6px; padding: 4px 10px; text-decoration: none; white-space: nowrap; }
+    .open-button:hover { background: #3a4147; }
+    .empty { color: #96a0a6; }
+    .archived-toggle { margin-left: auto; font-size: 11px; color: #96a0a6; background: none; border: 1px solid #2c3236; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+    .archived-toggle:hover { color: #eceae4; }
+    li.archived { opacity: 0.55; }
+
+    .mascot { width: 72px; height: 72px; overflow: visible; flex-shrink: 0; }
+    .mascot .hat, .mascot .hat-night, .mascot .hat-band, .mascot .hat-party { opacity: 0; }
+    .mascot.sleeping .hat-night, .mascot.running .hat-band, .mascot.finished .hat-party { opacity: 1; }
+    .mascot.waiting .hat { opacity: 1; }
+    .mascot .body, .mascot .leg, .mascot .arm { fill: #d97757; }
+    .mascot .eye { fill: #14181b; transform-box: fill-box; transform-origin: center; }
+    .mascot .bob { transform-box: fill-box; transform-origin: 50% 100%; }
+    .mascot .arm { transform-box: fill-box; transform-origin: 50% 0%; }
+    .mascot .bubble, .mascot .check, .mascot .question, .mascot .zzz, .mascot .dust { opacity: 0; }
+    .mascot .bubble, .mascot .check { transform-box: fill-box; transform-origin: center; }
+    .mascot .zzz { fill: #96a0a6; font-family: ui-monospace, Menlo, monospace; font-weight: 700; }
+    .mascot .dust { fill: #3fb950; }
+    .mascot .check { stroke: #14181b; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .mascot .question { fill: #14181b; font-family: ui-monospace, Menlo, monospace; font-weight: 700; font-size: 11px; }
+
+    .mascot.sleeping .body, .mascot.sleeping .leg, .mascot.sleeping .arm { fill: #6e7781; }
+    .mascot.sleeping .eye { transform: scaleY(0.12); }
+    .mascot.sleeping .bob { animation: breathe 3.2s ease-in-out infinite; }
+    .mascot.sleeping .zzz { animation: rise 2.8s ease-in infinite; }
+    .mascot.sleeping .zzz.two { animation-delay: 1.4s; }
+
+    .mascot.running .bob { animation: bounce 0.45s ease-in-out infinite; }
+    .mascot.running .leg.a { animation: stride 0.45s ease-in-out infinite; }
+    .mascot.running .leg.b { animation: stride 0.45s ease-in-out infinite reverse; }
+    .mascot.running .arm.a { animation: swing 0.45s ease-in-out infinite; }
+    .mascot.running .arm.b { animation: swing 0.45s ease-in-out infinite reverse; }
+    .mascot.running .dust { animation: puff 0.9s ease-out infinite; }
+
+    .mascot.finished .bob { animation: hop 1.3s ease-out infinite; }
+    .mascot.finished .arm.a { animation: wave 1.3s ease-in-out infinite; }
+    .mascot.finished .bubble.done { fill: #d9b84d; animation: pop 1.3s ease-out infinite; }
+    .mascot.finished .check { animation: pop 1.3s ease-out infinite; }
+
+    .mascot.waiting .bob { animation: shake 0.6s ease-in-out infinite; }
+    .mascot.waiting .bubble.ask { opacity: 1; fill: #e8833a; animation: pulse 1.2s ease-in-out infinite; }
+    .mascot.waiting .question { opacity: 1; }
+
+    @keyframes breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.04); } }
+    @keyframes rise { 0% { transform: translate(0, 0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(6px, -16px); opacity: 0; } }
+    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+    @keyframes stride { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+    @keyframes swing { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-14deg); } }
+    @keyframes puff { 0% { opacity: 0.8; transform: translate(0, 0); } 100% { opacity: 0; transform: translate(-10px, 2px); } }
+    @keyframes hop { 0%, 100% { transform: translateY(0); } 15% { transform: translateY(-10px); } 30% { transform: translateY(0); } 40% { transform: translateY(-3px); } 50% { transform: translateY(0); } }
+    @keyframes wave { 0%, 100% { transform: rotate(0deg); } 30% { transform: rotate(-30deg); } 60% { transform: rotate(10deg); } }
+    @keyframes pop { 0%, 20% { opacity: 0; transform: scale(0.6); } 35%, 75% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.6); } }
+    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+    @keyframes shake { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-4deg); } 75% { transform: rotate(4deg); } }
+  </style>
+</head>
+<body>
+  <header>
+    <svg id="mascot" class="mascot sleeping" viewBox="0 -12 80 72">
+      <g class="bob">
+        <rect class="arm a" x="7" y="22" width="6" height="12"/>
+        <rect class="arm b" x="67" y="22" width="6" height="12"/>
+        <rect class="body" x="13" y="10" width="54" height="28"/>
+        <rect class="eye" x="19" y="22" width="6" height="6"/>
+        <rect class="eye" x="55" y="22" width="6" height="6"/>
+        <g class="hat-night">
+          <path d="M18 10 Q28 -12 52 -4 Q58 -2 60 6 L64 10 Z" fill="#4a6fa5"/>
+          <circle cx="62" cy="-4" r="4" fill="#eceae4"/>
+        </g>
+        <g class="hat-band">
+          <rect x="12" y="4" width="56" height="6" fill="#d9b84d"/>
+          <path d="M60 10 L66 14 L64 18" stroke="#3fb950" stroke-width="2" fill="none"/>
+        </g>
+        <g class="hat-party">
+          <polygon points="40,-14 29,10 51,10" fill="#d9b84d"/>
+          <circle cx="40" cy="-2" r="2" fill="#e8833a"/>
+          <circle cx="45" cy="4" r="1.6" fill="#3fb950"/>
+        </g>
+        <g class="hat">
+          <rect x="23" y="-10" width="34" height="18" fill="#14181b"/>
+          <rect x="23" y="4" width="34" height="3" fill="#e8833a"/>
+          <rect x="14" y="7" width="52" height="4" fill="#14181b"/>
+        </g>
+        <rect class="leg a" x="13" y="38" width="6" height="10"/>
+        <rect class="leg b" x="25" y="38" width="6" height="10"/>
+        <rect class="leg a" x="49" y="38" width="6" height="10"/>
+        <rect class="leg b" x="61" y="38" width="6" height="10"/>
+      </g>
+      <rect class="dust" x="6" y="50" width="6" height="4"/>
+      <text class="zzz" x="70" y="10" font-size="10">z</text>
+      <text class="zzz two" x="75" y="4" font-size="8">z</text>
+      <circle class="bubble done" cx="72" cy="8" r="7"/>
+      <path class="check" d="M67 8 L71 12 L78 4"/>
+      <circle class="bubble ask" cx="72" cy="8" r="7"/>
+      <text class="question" x="69" y="12">?</text>
+    </svg>
+    <span id="general-light" class="light general-light grey"></span>
+    <h1>Mr Claudio Session Assistant</h1>
+    <button id="archived-toggle" class="archived-toggle" type="button"></button>
+  </header>
+  <ul id="session-list"></ul>
+  <script>
+    const statusLabels = { waiting: 'Needs you', finished: 'Finished', running: 'Running', ended: 'Idle' };
+    const lightByStatus = { waiting: 'orange', finished: 'yellow', running: 'green', ended: 'grey' };
+    const mascotStateByLight = { grey: 'sleeping', green: 'running', yellow: 'finished', orange: 'waiting' };
+    let showArchived = false;
+    let latestState = null;
+
+    function acknowledge(sessionId) {
+      fetch('/acknowledge', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      }).then(refresh);
+    }
+
+    function renderSessionRow(session) {
+      const row = document.createElement('li');
+      row.className = session.isArchived ? 'archived' : '';
+
+      const light = document.createElement('span');
+      light.className = `light ${lightByStatus[session.status]}`;
+
+      const textBlock = document.createElement('div');
+      textBlock.style.minWidth = '0';
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = session.name;
+      const lastMessage = document.createElement('div');
+      lastMessage.className = 'last-message';
+      lastMessage.textContent = session.lastMessage;
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = `${statusLabels[session.status]} · ${session.cwd.split('/').pop()}`;
+      textBlock.append(name, lastMessage, meta);
+
+      const openLink = document.createElement('a');
+      openLink.className = 'open-button';
+      openLink.href = `claude://resume?session=${encodeURIComponent(session.sessionId)}`;
+      openLink.textContent = 'Open';
+      openLink.addEventListener('click', () => acknowledge(session.sessionId));
+
+      row.append(light, textBlock, openLink);
+      return row;
+    }
+
+    function render() {
+      document.getElementById('mascot').setAttribute('class', `mascot ${mascotStateByLight[latestState.light]}`);
+      document.getElementById('general-light').setAttribute('class', `light general-light ${latestState.light}`);
+
+      const archivedCount = latestState.sessions.filter((session) => session.isArchived).length;
+      document.getElementById('archived-toggle').textContent = showArchived
+        ? 'Hide archived'
+        : `Show archived (${archivedCount})`;
+
+      const visibleSessions = latestState.sessions.filter((session) => showArchived || !session.isArchived);
+      const sessionList = document.getElementById('session-list');
+      sessionList.replaceChildren();
+      if (visibleSessions.length === 0) {
+        const emptyMessage = document.createElement('li');
+        emptyMessage.className = 'empty';
+        emptyMessage.textContent = 'No sessions found.';
+        sessionList.append(emptyMessage);
+      }
+      for (const session of visibleSessions) {
+        sessionList.append(renderSessionRow(session));
+      }
+    }
+
+    async function refresh() {
+      const response = await fetch('/api/state');
+      latestState = await response.json();
+      render();
+    }
+
+    document.getElementById('archived-toggle').addEventListener('click', () => {
+      showArchived = !showArchived;
+      render();
+    });
+
+    refresh();
+    setInterval(refresh, 2000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,141 @@
+import { basename } from 'node:path';
+
+export const STATUS = Object.freeze({
+  running: 'running',
+  finished: 'finished',
+  waiting: 'waiting',
+  ended: 'ended',
+});
+
+const STATUS_SORT_ORDER = Object.freeze({
+  waiting: 0,
+  finished: 1,
+  running: 2,
+  ended: 3,
+});
+
+const LIGHT_BY_STATUS = Object.freeze({
+  waiting: 'orange',
+  finished: 'yellow',
+  running: 'green',
+  ended: 'grey',
+});
+
+export const FINISHED_VISIBLE_MS = 45_000;
+
+const PERMISSION_NOTIFICATION_TYPES = new Set(['permission_prompt', 'elicitation_dialog']);
+
+export function endsWithQuestion(text) {
+  return typeof text === 'string' && text.trimEnd().endsWith('?');
+}
+
+export function statusFromHookEvent(eventName, payload) {
+  if (eventName === 'SessionStart' || eventName === 'UserPromptSubmit') {
+    return STATUS.running;
+  }
+  if (eventName === 'Stop') {
+    return payload.transcript_asks_question || endsWithQuestion(payload.last_assistant_message)
+      ? STATUS.waiting
+      : STATUS.finished;
+  }
+  if (eventName === 'SessionEnd') {
+    return STATUS.ended;
+  }
+  if (eventName === 'Notification' && PERMISSION_NOTIFICATION_TYPES.has(payload.notification_type)) {
+    return STATUS.waiting;
+  }
+  return null;
+}
+
+export function applyHookEvent(sessionsById, { eventName, payload, now }) {
+  const sessionId = payload.session_id;
+  const nextStatus = statusFromHookEvent(eventName, payload);
+  if (!sessionId || !nextStatus) {
+    return { sessionsById };
+  }
+
+  const previousSession = sessionsById.get(sessionId);
+  const statusChanged = previousSession?.status !== nextStatus;
+  const updatedSession = {
+    sessionId,
+    status: nextStatus,
+    statusChangedAt: statusChanged ? now : previousSession.statusChangedAt,
+    cwd: payload.cwd ?? previousSession?.cwd ?? '',
+    transcriptPath: payload.transcript_path ?? previousSession?.transcriptPath ?? '',
+    name: previousSession?.name ?? nameFromCwd(payload.cwd),
+    lastMessage: payload.last_assistant_message
+      ? payload.last_assistant_message.replace(/\s+/g, ' ').trim().slice(0, 140)
+      : previousSession?.lastMessage ?? '',
+  };
+
+  const nextSessionsById = new Map(sessionsById);
+  nextSessionsById.set(sessionId, updatedSession);
+
+  return { sessionsById: nextSessionsById };
+}
+
+export function applyDesktopMetadata(sessions, metadataByTranscriptId) {
+  return sessions.map((session) => {
+    const metadata = metadataByTranscriptId.get(session.sessionId);
+    if (!metadata) {
+      return { ...session, isArchived: false };
+    }
+    const finishedAndAlreadySeen =
+      session.status === STATUS.finished && metadata.lastFocusedAt >= metadata.lastTurnEdgeAt;
+    return {
+      ...session,
+      name: metadata.title || session.name,
+      isArchived: metadata.isArchived,
+      status: finishedAndAlreadySeen ? STATUS.ended : session.status,
+    };
+  });
+}
+
+export function sortSessions(sessions) {
+  return [...sessions].sort((first, second) => {
+    const rankDifference = STATUS_SORT_ORDER[first.status] - STATUS_SORT_ORDER[second.status];
+    if (rankDifference !== 0) {
+      return rankDifference;
+    }
+    return second.statusChangedAt - first.statusChangedAt;
+  });
+}
+
+export function generalLight(sessions) {
+  if (sessions.some((session) => session.status === STATUS.waiting)) {
+    return 'orange';
+  }
+  if (sessions.some((session) => session.status === STATUS.finished)) {
+    return 'yellow';
+  }
+  if (sessions.some((session) => session.status === STATUS.running)) {
+    return 'green';
+  }
+  return 'grey';
+}
+
+export function expireFinishedSessions(sessions, now) {
+  return sessions.map((session) =>
+    session.status === STATUS.finished && now - session.statusChangedAt > FINISHED_VISIBLE_MS
+      ? { ...session, status: STATUS.ended }
+      : session,
+  );
+}
+
+export function acknowledgeSession(sessionsById, sessionId, now) {
+  const session = sessionsById.get(sessionId);
+  if (!session || session.status !== STATUS.finished) {
+    return sessionsById;
+  }
+  const nextSessionsById = new Map(sessionsById);
+  nextSessionsById.set(sessionId, { ...session, status: STATUS.ended, statusChangedAt: now });
+  return nextSessionsById;
+}
+
+export function lightForStatus(status) {
+  return LIGHT_BY_STATUS[status];
+}
+
+export function nameFromCwd(cwd) {
+  return cwd ? basename(cwd) : 'unknown session';
+}
