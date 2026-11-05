@@ -26,6 +26,11 @@ function lastMessageEntryOf(entries) {
   return entries.findLast((entry) => entry.type === 'user' || entry.type === 'assistant');
 }
 
+export function lastEntryTimeOf(entries) {
+  const timestamp = lastMessageEntryOf(entries)?.timestamp;
+  return timestamp ? Date.parse(timestamp) : 0;
+}
+
 function entriesSincePrompt(entries) {
   const lastPromptIndex = entries.findLastIndex(
     (entry) => entry.type === 'user' && typeof entry.message?.content === 'string',
@@ -146,6 +151,7 @@ export async function scanTranscripts({ projectsDir, now }) {
       sessionId: basename(transcriptPath, '.jsonl'),
       status: statusFromTranscriptEntries(entries, { lastActivityAt: fileStats.mtimeMs, now }),
       statusChangedAt: fileStats.mtimeMs,
+      lastEntryAt: lastEntryTimeOf(entries),
       cwd,
       transcriptPath,
       name: nameFromTranscriptEntries(entries, cwd),

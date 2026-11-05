@@ -6,18 +6,23 @@ Each session gets a light:
 
 | Light | Status | Meaning |
 | --- | --- | --- |
+| Red | waiting | Claude has been waiting for you for more than 10 minutes |
 | Orange | waiting | Claude asked a question or needs a permission |
 | Yellow | finished | Claude finished a turn you haven't looked at yet |
 | Green | running | Claude is working |
 | Grey | ended | Nothing to do |
 
+A waiting session shows how long it has waited and, for a permission prompt, what Claude needs, like "Claude needs your permission to use Bash". Other sessions show Claude's latest message, updated while it works.
+
 The window sits in the bottom-right corner and pops up (without taking focus) when a session turns orange or yellow.
 
 ## How it works
 
-- `hook.mjs` is a Claude Code hook. It receives each hook event on stdin, appends it to `hook-payloads.jsonl`, and posts it to the local server.
-- `server.mjs` runs on `http://127.0.0.1:4317`. It keeps session state in memory, serves the UI from `public/index.html`, and exposes `GET /api/state`.
-- On startup, `transcript-scan.mjs` reads the last 24 hours of transcripts in `~/.claude/projects` so existing sessions show up before any hook fires.
+- `hook.mjs` is a Claude Code hook. It receives each hook event on stdin and posts it to the local server.
+- `server.mjs` runs on `http://127.0.0.1:4317`. It keeps session state, serves the UI from `public/index.html`, exposes `GET /api/state`, and pushes every change to the window over `GET /api/stream`.
+- The server watches `~/.claude/projects` and updates a session's preview as soon as its transcript changes.
+- State is saved to `~/Library/Application Support/Mr Claudio Session Assistant/sessions.json`. After a restart, a saved session is kept unless its transcript got a newer message while the app was down.
+- On startup, `transcript-scan.mjs` reads the last 24 hours of transcripts in `~/.claude/projects` so sessions show up before any hook fires.
 - `desktop-metadata.mjs` reads the Claude desktop app's session files for titles and archived state.
 - `session-state.mjs` holds the status rules. `main.mjs` is the Electron entry point.
 
@@ -34,11 +39,7 @@ pnpm install
 pnpm test
 ```
 
-If `pnpm start` fails because Electron isn't installed, pnpm skipped Electron's download script. Run it by hand:
-
-```bash
-node node_modules/electron/install.js
-```
+Electron downloads its binary the first time you run `pnpm start`.
 
 ## Add the hooks
 
@@ -85,10 +86,11 @@ To launch it from the Dock or Finder, create an Automator **Application** with o
 ## Configuration
 
 - `SESSION_ASSISTANT_PORT` changes the port that `hook.mjs` and `server.mjs` use. `main.mjs` always loads port 4317, so change it there too.
+- `SESSION_ASSISTANT_DEBUG=1` makes `hook.mjs` append every hook payload to `hook-payloads.jsonl`. It's off by default because the payloads include your prompts. Set it in the `env` block of `~/.claude/settings.json` to turn it on.
 
 ## Files not in the repo
 
-- `hook-payloads.jsonl` holds every hook payload, including your prompts, so it's ignored.
+- `hook-payloads.jsonl`, the debug log, is ignored because it holds your prompts.
 - The Automator `.app` is machine-specific, so it's ignored too.
 
 ## Previews

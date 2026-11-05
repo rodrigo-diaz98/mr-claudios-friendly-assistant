@@ -66,6 +66,7 @@ export function applyHookEvent(sessionsById, { eventName, payload, now }) {
     lastMessage: payload.last_assistant_message
       ? payload.last_assistant_message.replace(/\s+/g, ' ').trim().slice(0, 140)
       : previousSession?.lastMessage ?? '',
+    waitingReason: eventName === 'Notification' ? payload.message ?? '' : '',
   };
 
   const nextSessionsById = new Map(sessionsById);
@@ -82,6 +83,17 @@ export function applyTranscriptMessage(sessionsById, sessionId, lastMessage) {
   const nextSessionsById = new Map(sessionsById);
   nextSessionsById.set(sessionId, { ...session, lastMessage });
   return nextSessionsById;
+}
+
+export function mergeSavedSessions(scannedSessions, savedState) {
+  if (!savedState) {
+    return scannedSessions;
+  }
+  const savedSessionsById = new Map(savedState.sessions.map((session) => [session.sessionId, session]));
+  return scannedSessions.map((scannedSession) => {
+    const savedSession = savedSessionsById.get(scannedSession.sessionId);
+    return savedSession && savedState.savedAt >= scannedSession.lastEntryAt ? savedSession : scannedSession;
+  });
 }
 
 export function applyDesktopMetadata(sessions, metadataByTranscriptId) {

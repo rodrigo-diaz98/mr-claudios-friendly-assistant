@@ -1,7 +1,8 @@
+import { watch } from 'node:fs';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   acknowledgeSession,
@@ -10,6 +11,7 @@ import {
   applyTranscriptMessage,
   expireFinishedSessions,
   generalLight,
+  mergeSavedSessions,
   sortSessions,
   STATUS,
 } from './session-state.mjs';
@@ -25,10 +27,113 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.SESSION_ASSISTANT_PORT ?? 4317);
 const projectsDir = join(homedir(), '.claude', 'projects');
+const savedStatePath = join(homedir(), 'Library', 'Application Support', 'Mr Claudio Session Assistant', 'sessions.json');
+const SAVE_DELAY_MS = 500;
+const TRANSCRIPT_SETTLE_MS = 300;
+const TICK_INTERVAL_MS = 5000;
+
+async function readSavedState() {
+  try {
+    return JSON.parse(await readFile(savedStatePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
 
 const scannedSessions = await scanTranscripts({ projectsDir, now: Date.now() });
-let sessionsById = new Map(scannedSessions.map((session) => [session.sessionId, session]));
+const startupSessions = mergeSavedSessions(scannedSessions, await readSavedState());
+let sessionsById = new Map(startupSessions.map((session) => [session.sessionId, session]));
 const transcriptSizeById = new Map();
+const settleTimerById = new Map();
+const streamClients = new Set();
+const stateListeners = new Set();
+let lastPublishedJson = '';
+let publishQueue = Promise.resolve();
+let saveTimer = null;
+
+function saveSoon() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const savedState = { savedAt: Date.now(), sessions: [...sessionsById.values()] };
+    mkdir(dirname(savedStatePath), { recursive: true })
+      .then(() => writeFile(savedStatePath, JSON.stringify(savedState)))
+      .catch(() => {});
+  }, SAVE_DELAY_MS);
+}
+
+async function currentState() {
+  const metadataByTranscriptId = await readDesktopMetadata();
+  const sessionsWithMetadata = applyDesktopMetadata([...sessionsById.values()], metadataByTranscriptId);
+  const sessions = sortSessions(expireFinishedSessions(sessionsWithMetadata, Date.now()));
+  const activeSessions = sessions.filter((session) => !session.isArchived);
+  return { light: generalLight(activeSessions), sessions };
+}
+
+async function publishNow() {
+  const state = await currentState();
+  const stateJson = JSON.stringify(state);
+  if (stateJson === lastPublishedJson) {
+    return;
+  }
+  lastPublishedJson = stateJson;
+  for (const client of streamClients) {
+    client.write(`data: ${stateJson}\n\n`);
+  }
+  for (const listener of stateListeners) {
+    listener(state);
+  }
+}
+
+function publishState() {
+  publishQueue = publishQueue.then(publishNow).catch(() => {});
+  return publishQueue;
+}
+
+function setSessionsById(nextSessionsById) {
+  if (nextSessionsById === sessionsById) {
+    return;
+  }
+  sessionsById = nextSessionsById;
+  saveSoon();
+  publishState();
+}
+
+export function subscribeToState(listener) {
+  stateListeners.add(listener);
+  currentState().then(listener).catch(() => {});
+}
+
+async function refreshTranscriptMessage(sessionId) {
+  const session = sessionsById.get(sessionId);
+  if (!session || session.status === STATUS.ended || !session.transcriptPath) {
+    return;
+  }
+  const fileStats = await stat(session.transcriptPath).catch(() => null);
+  if (!fileStats || fileStats.size === transcriptSizeById.get(sessionId)) {
+    return;
+  }
+  transcriptSizeById.set(sessionId, fileStats.size);
+  const tailEntries = parseTranscriptLines(await readTranscriptTail(session.transcriptPath, fileStats.size));
+  setSessionsById(applyTranscriptMessage(sessionsById, sessionId, lastMessageFromTranscriptEntries(tailEntries)));
+}
+
+function refreshTranscriptSoon(sessionId) {
+  clearTimeout(settleTimerById.get(sessionId));
+  settleTimerById.set(
+    sessionId,
+    setTimeout(() => {
+      settleTimerById.delete(sessionId);
+      refreshTranscriptMessage(sessionId).catch(() => {});
+    }, TRANSCRIPT_SETTLE_MS),
+  );
+}
+
+async function tick() {
+  for (const sessionId of sessionsById.keys()) {
+    await refreshTranscriptMessage(sessionId).catch(() => {});
+  }
+  await publishState();
+}
 
 async function readRequestBody(request) {
   const chunks = [];
@@ -55,38 +160,29 @@ async function handleHookEvent(request, response) {
   const { eventName, payload: hookPayload } = JSON.parse(await readRequestBody(request));
   const payload = await withTranscriptQuestion(eventName, hookPayload);
   const result = applyHookEvent(sessionsById, { eventName, payload, now: Date.now() });
-  sessionsById = result.sessionsById;
+  setSessionsById(result.sessionsById);
   response.writeHead(204);
   response.end();
 }
 
-async function refreshActiveMessages() {
-  for (const session of sessionsById.values()) {
-    if (session.status === STATUS.ended || !session.transcriptPath) {
-      continue;
-    }
-    const fileStats = await stat(session.transcriptPath).catch(() => null);
-    if (!fileStats || fileStats.size === transcriptSizeById.get(session.sessionId)) {
-      continue;
-    }
-    transcriptSizeById.set(session.sessionId, fileStats.size);
-    const tailEntries = parseTranscriptLines(await readTranscriptTail(session.transcriptPath, fileStats.size));
-    sessionsById = applyTranscriptMessage(sessionsById, session.sessionId, lastMessageFromTranscriptEntries(tailEntries));
-  }
+async function handleState(response) {
+  sendJson(response, 200, await currentState());
 }
 
-async function handleState(response) {
-  await refreshActiveMessages();
-  const metadataByTranscriptId = await readDesktopMetadata();
-  const sessionsWithMetadata = applyDesktopMetadata([...sessionsById.values()], metadataByTranscriptId);
-  const sessions = sortSessions(expireFinishedSessions(sessionsWithMetadata, Date.now()));
-  const activeSessions = sessions.filter((session) => !session.isArchived);
-  sendJson(response, 200, { light: generalLight(activeSessions), sessions });
+async function handleStream(request, response) {
+  response.writeHead(200, {
+    'content-type': 'text/event-stream',
+    'cache-control': 'no-cache',
+    connection: 'keep-alive',
+  });
+  response.write(`data: ${JSON.stringify(await currentState())}\n\n`);
+  streamClients.add(response);
+  request.on('close', () => streamClients.delete(response));
 }
 
 async function handleAcknowledge(request, response) {
   const { sessionId } = JSON.parse(await readRequestBody(request));
-  sessionsById = acknowledgeSession(sessionsById, sessionId, Date.now());
+  setSessionsById(acknowledgeSession(sessionsById, sessionId, Date.now()));
   response.writeHead(204);
   response.end();
 }
@@ -105,6 +201,8 @@ const server = createServer(async (request, response) => {
       await handleAcknowledge(request, response);
     } else if (request.method === 'GET' && request.url === '/api/state') {
       await handleState(response);
+    } else if (request.method === 'GET' && request.url === '/api/stream') {
+      await handleStream(request, response);
     } else if (request.method === 'GET' && request.url === '/') {
       await handleIndexPage(response);
     } else {
@@ -116,6 +214,14 @@ const server = createServer(async (request, response) => {
     response.end(String(error));
   }
 });
+
+watch(projectsDir, { recursive: true }, (eventType, fileName) => {
+  if (fileName?.endsWith('.jsonl')) {
+    refreshTranscriptSoon(basename(fileName, '.jsonl'));
+  }
+});
+
+setInterval(() => tick().catch(() => {}), TICK_INTERVAL_MS);
 
 server.listen(port, '127.0.0.1', () => {
   console.log(`session-assistant on http://127.0.0.1:${port} with ${sessionsById.size} sessions`);

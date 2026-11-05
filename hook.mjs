@@ -6,6 +6,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const payloadLogPath = join(here, 'hook-payloads.jsonl');
 const serverPort = Number(process.env.SESSION_ASSISTANT_PORT ?? 4317);
 const eventName = process.argv[2] ?? 'unknown';
+const shouldLogPayloads = process.env.SESSION_ASSISTANT_DEBUG === '1';
 
 async function readStdin() {
   const chunks = [];
@@ -24,8 +25,10 @@ async function main() {
     payload = { unparsedInput: rawInput };
   }
 
-  mkdirSync(here, { recursive: true });
-  appendFileSync(payloadLogPath, JSON.stringify({ eventName, receivedAt: new Date().toISOString(), payload }) + '\n');
+  if (shouldLogPayloads) {
+    mkdirSync(here, { recursive: true });
+    appendFileSync(payloadLogPath, JSON.stringify({ eventName, receivedAt: new Date().toISOString(), payload }) + '\n');
+  }
 
   try {
     await fetch(`http://127.0.0.1:${serverPort}/events`, {

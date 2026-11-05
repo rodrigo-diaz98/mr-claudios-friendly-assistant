@@ -8,10 +8,11 @@ import {
   expireFinishedSessions,
   FINISHED_VISIBLE_MS,
   generalLight,
+  mergeSavedSessions,
   sortSessions,
   STATUS,
 } from './session-state.mjs';
-import { statusFromTranscriptEntries } from './transcript-scan.mjs';
+import { lastEntryTimeOf, statusFromTranscriptEntries } from './transcript-scan.mjs';
 
 const SESSION_ID = 'session-a';
 const CWD = '/Users/dev/projects/sample-app';
@@ -48,12 +49,15 @@ describe('applyHookEvent', () => {
     assert.equal(result.sessionsById.get(SESSION_ID).status, STATUS.waiting);
   });
 
-  it('marks a session waiting on a permission prompt', () => {
+  it('marks a session waiting on a permission prompt and keeps the reason until the next prompt', () => {
     const result = applyHookEvent(
       new Map(),
       eventFor('Notification', { notification_type: 'permission_prompt', message: 'Claude needs permission' }),
     );
     assert.equal(result.sessionsById.get(SESSION_ID).status, STATUS.waiting);
+    assert.equal(result.sessionsById.get(SESSION_ID).waitingReason, 'Claude needs permission');
+    const afterPrompt = applyHookEvent(result.sessionsById, eventFor('UserPromptSubmit', {}, 2000));
+    assert.equal(afterPrompt.sessionsById.get(SESSION_ID).waitingReason, '');
   });
 
   it('ignores idle notifications because a finished session is already yellow', () => {
@@ -88,6 +92,31 @@ describe('applyTranscriptMessage', () => {
     assert.equal(midTurn.get(SESSION_ID).status, STATUS.running);
     assert.equal(applyTranscriptMessage(midTurn, SESSION_ID, ''), midTurn);
     assert.equal(applyTranscriptMessage(midTurn, 'unknown', 'Hi.'), midTurn);
+  });
+});
+
+describe('mergeSavedSessions', () => {
+  it('keeps the saved state unless the transcript has a newer message, and drops sessions no longer scanned', () => {
+    const scannedSessions = [
+      { sessionId: 'quiet', status: STATUS.ended, lastEntryAt: 1000 },
+      { sessionId: 'moved-on', status: STATUS.finished, lastEntryAt: 3000 },
+      { sessionId: 'new', status: STATUS.running, lastEntryAt: 3000 },
+    ];
+    const savedState = {
+      savedAt: 2000,
+      sessions: [
+        { sessionId: 'quiet', status: STATUS.waiting, waitingReason: 'Claude needs your permission to use Bash' },
+        { sessionId: 'moved-on', status: STATUS.waiting },
+        { sessionId: 'gone', status: STATUS.waiting },
+      ],
+    };
+    const merged = mergeSavedSessions(scannedSessions, savedState);
+    assert.deepEqual(
+      merged.map((session) => [session.sessionId, session.status]),
+      [['quiet', STATUS.waiting], ['moved-on', STATUS.finished], ['new', STATUS.running]],
+    );
+    assert.equal(merged[0].waitingReason, 'Claude needs your permission to use Bash');
+    assert.equal(mergeSavedSessions(scannedSessions, null), scannedSessions);
   });
 });
 
@@ -220,5 +249,15 @@ describe('statusFromTranscriptEntries', () => {
   it('is ended when the file has been quiet for a long time', () => {
     const entries = [{ type: 'user', message: { content: 'hi' } }];
     assert.equal(statusFromTranscriptEntries(entries, { lastActivityAt: 0, now }), STATUS.ended);
+  });
+
+  it('times the last message, ignoring later bookkeeping entries', () => {
+    const entries = [
+      { type: 'user', timestamp: '2026-11-05T20:00:00.000Z', message: { content: 'hi' } },
+      { type: 'assistant', timestamp: '2026-11-05T20:00:05.000Z', message: { stop_reason: 'tool_use' } },
+      { type: 'frame-link', timestamp: '2026-11-05T21:00:00.000Z' },
+    ];
+    assert.equal(lastEntryTimeOf(entries), Date.parse('2026-11-05T20:00:05.000Z'));
+    assert.equal(lastEntryTimeOf([]), 0);
   });
 });

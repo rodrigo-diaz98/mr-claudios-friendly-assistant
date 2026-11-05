@@ -12,6 +12,8 @@
     .light.yellow { background: #d9b84d; }
     .light.orange { background: #e8833a; }
     .light.grey { background: #6e7781; }
+    .light.red { background: #e5534b; }
+    .meta.overdue { color: #e5534b; }
     h1 { font-size: 14px; margin: 0; font-weight: 600; }
     .general-light { width: 16px; height: 16px; }
     .general-light.orange { animation: flash 0.9s ease-in-out infinite; }
@@ -127,15 +129,28 @@
     const statusLabels = { waiting: 'Needs you', finished: 'Finished', running: 'Running', ended: 'Idle' };
     const lightByStatus = { waiting: 'orange', finished: 'yellow', running: 'green', ended: 'grey' };
     const mascotStateByLight = { grey: 'sleeping', green: 'running', yellow: 'finished', orange: 'waiting' };
+    const OVERDUE_AFTER_MS = 10 * 60 * 1000;
     let showArchived = false;
     let latestState = null;
+
+    function waitingFor(session) {
+      const minutes = Math.floor((Date.now() - session.statusChangedAt) / 60_000);
+      if (minutes < 1) {
+        return 'just now';
+      }
+      return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+    }
+
+    function isOverdue(session) {
+      return session.status === 'waiting' && Date.now() - session.statusChangedAt > OVERDUE_AFTER_MS;
+    }
 
     function acknowledge(sessionId) {
       fetch('/acknowledge', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ sessionId }),
-      }).then(refresh);
+      });
     }
 
     function renderSessionRow(session) {
@@ -143,7 +158,7 @@
       row.className = session.isArchived ? 'archived' : '';
 
       const light = document.createElement('span');
-      light.className = `light ${lightByStatus[session.status]}`;
+      light.className = `light ${isOverdue(session) ? 'red' : lightByStatus[session.status]}`;
 
       const textBlock = document.createElement('div');
       textBlock.style.minWidth = '0';
@@ -152,10 +167,13 @@
       name.textContent = session.name;
       const lastMessage = document.createElement('div');
       lastMessage.className = 'last-message';
-      lastMessage.textContent = session.lastMessage;
+      lastMessage.textContent =
+        session.status === 'waiting' && session.waitingReason ? session.waitingReason : session.lastMessage;
       const meta = document.createElement('div');
-      meta.className = 'meta';
-      meta.textContent = `${statusLabels[session.status]} · ${session.cwd.split('/').pop()}`;
+      meta.className = isOverdue(session) ? 'meta overdue' : 'meta';
+      const statusText =
+        session.status === 'waiting' ? `${statusLabels.waiting} · ${waitingFor(session)}` : statusLabels[session.status];
+      meta.textContent = `${statusText} · ${session.cwd.split('/').pop()}`;
       textBlock.append(name, lastMessage, meta);
 
       const openLink = document.createElement('a');
@@ -191,19 +209,16 @@
       }
     }
 
-    async function refresh() {
-      const response = await fetch('/api/state');
-      latestState = await response.json();
-      render();
-    }
-
     document.getElementById('archived-toggle').addEventListener('click', () => {
       showArchived = !showArchived;
       render();
     });
 
-    refresh();
-    setInterval(refresh, 2000);
+    new EventSource('/api/stream').addEventListener('message', (event) => {
+      latestState = JSON.parse(event.data);
+      render();
+    });
+    setInterval(() => latestState && render(), 30_000);
   </script>
 </body>
 </html>
