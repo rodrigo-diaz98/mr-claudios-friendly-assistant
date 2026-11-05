@@ -4,6 +4,7 @@ import {
   acknowledgeSession,
   applyDesktopMetadata,
   applyHookEvent,
+  applyTranscriptMessage,
   expireFinishedSessions,
   FINISHED_VISIBLE_MS,
   generalLight,
@@ -75,6 +76,18 @@ describe('applyHookEvent', () => {
     const sessionsById = new Map();
     const result = applyHookEvent(sessionsById, { eventName: 'Stop', now: 1000, payload: {} });
     assert.equal(result.sessionsById, sessionsById);
+  });
+});
+
+describe('applyTranscriptMessage', () => {
+  it('shows the latest transcript text mid-turn, keeping the old text when there is none', () => {
+    const afterStop = applyHookEvent(new Map(), eventFor('Stop', { last_assistant_message: 'Old reply.' }, 1000));
+    const afterPrompt = applyHookEvent(afterStop.sessionsById, eventFor('UserPromptSubmit', {}, 2000));
+    const midTurn = applyTranscriptMessage(afterPrompt.sessionsById, SESSION_ID, 'Committing PR 1 now.');
+    assert.equal(midTurn.get(SESSION_ID).lastMessage, 'Committing PR 1 now.');
+    assert.equal(midTurn.get(SESSION_ID).status, STATUS.running);
+    assert.equal(applyTranscriptMessage(midTurn, SESSION_ID, ''), midTurn);
+    assert.equal(applyTranscriptMessage(midTurn, 'unknown', 'Hi.'), midTurn);
   });
 });
 

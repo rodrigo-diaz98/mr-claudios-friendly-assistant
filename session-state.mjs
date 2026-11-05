@@ -74,6 +74,16 @@ export function applyHookEvent(sessionsById, { eventName, payload, now }) {
   return { sessionsById: nextSessionsById };
 }
 
+export function applyTranscriptMessage(sessionsById, sessionId, lastMessage) {
+  const session = sessionsById.get(sessionId);
+  if (!session || !lastMessage || session.lastMessage === lastMessage) {
+    return sessionsById;
+  }
+  const nextSessionsById = new Map(sessionsById);
+  nextSessionsById.set(sessionId, { ...session, lastMessage });
+  return nextSessionsById;
+}
+
 export function applyDesktopMetadata(sessions, metadataByTranscriptId) {
   return sessions.map((session) => {
     const metadata = metadataByTranscriptId.get(session.sessionId);

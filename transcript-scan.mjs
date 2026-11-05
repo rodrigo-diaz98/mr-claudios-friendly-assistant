@@ -1,4 +1,4 @@
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { open, readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { endsWithQuestion, STATUS, nameFromCwd } from './session-state.mjs';
 
@@ -7,6 +7,7 @@ const QUIET_AFTER_MS = 10 * 60 * 1000;
 const WRAP_UP_TOOL_NAME = 'mcp__ccd_turn__wrap_up';
 const NAME_MAX_LENGTH = 80;
 const LAST_MESSAGE_MAX_LENGTH = 140;
+const TAIL_BYTES = 512 * 1024;
 
 export function parseTranscriptLines(rawText) {
   const entries = [];
@@ -102,6 +103,18 @@ export function nameFromTranscriptEntries(entries, cwd) {
     return nameFromCwd(cwd);
   }
   return firstTypedPrompt.message.content.trim().slice(0, NAME_MAX_LENGTH);
+}
+
+export async function readTranscriptTail(transcriptPath, fileSize) {
+  const length = Math.min(fileSize, TAIL_BYTES);
+  const fileHandle = await open(transcriptPath, 'r');
+  try {
+    const buffer = Buffer.alloc(length);
+    await fileHandle.read(buffer, 0, length, fileSize - length);
+    return buffer.toString('utf8');
+  } finally {
+    await fileHandle.close();
+  }
 }
 
 async function listTranscriptFiles(projectsDir) {
