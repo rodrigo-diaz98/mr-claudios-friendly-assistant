@@ -12,9 +12,27 @@ Each session gets a light:
 | Green | running | Claude is working |
 | Grey | ended | Nothing to do |
 
-A waiting session shows how long it has waited and, for a permission prompt, what Claude needs, like "Claude needs your permission to use Bash". Other sessions show Claude's latest message, updated while it works.
+A waiting session shows how long it has waited and, for a permission prompt, what Claude needs, like "Claude needs your permission to use Bash". Other sessions show Claude's latest message, updated while it works. A session stays green while background agents it launched are still working.
+
+A gray line under the title counts your sessions by status, like "1 needs you · 2 running", or says "All quiet". Archived sessions are hidden until you click "Show archived" at the bottom.
 
 The window sits in the bottom-right corner and pops up (without taking focus) when a session turns orange or yellow.
+
+## Ticket board
+
+A session started with `/zero-to-shipped` shows as a ticket: its key, five stage bars and its pull requests.
+
+| Stage | Starts when the session |
+| --- | --- |
+| Design | runs `/zero-to-shipped` (setup, ticket, brainstorming or plan mode) |
+| Build | runs `superpowers:executing-plans` or `superpowers:subagent-driven-development`, or edits code outside brainstorming and plan mode |
+| Test | runs `taking-evidence` |
+| Ship | runs `ship-it` |
+| Feedback | runs `review-pr-comments`, or gets its first Auto-fix event |
+
+- Stages only move forward. Finished stages are dark green, and the current one takes the session's light color.
+- The ticket key comes from the git branch (`dev/abc-123-search` becomes `ABC-123`), falling back to the `/zero-to-shipped` arguments, `initialize-worktree` or `getJiraIssue`.
+- PR numbers and the Auto-fix tag come from the Claude desktop app's session file. When every PR is merged, all bars fill and the ticket shows "Merged".
 
 ## How it works
 
@@ -23,7 +41,8 @@ The window sits in the bottom-right corner and pops up (without taking focus) wh
 - The server watches `~/.claude/projects` and updates a session's preview as soon as its transcript changes.
 - State is saved to `~/Library/Application Support/Mr Claudio Session Assistant/sessions.json`. After a restart, a saved session is kept unless its transcript got a newer message while the app was down.
 - On startup, `transcript-scan.mjs` reads the last 24 hours of transcripts in `~/.claude/projects` so sessions show up before any hook fires.
-- `desktop-metadata.mjs` reads the Claude desktop app's session files for titles and archived state.
+- `desktop-metadata.mjs` reads the Claude desktop app's session files for titles, archived state and pull requests.
+- `transcript-scan.mjs` also works out ticket progress and pending background agents from the transcript.
 - `session-state.mjs` holds the status rules. `main.mjs` is the Electron entry point.
 
 ## Requirements
