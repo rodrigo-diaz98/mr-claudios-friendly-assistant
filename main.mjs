@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { subscribeToState } from './server.mjs';
 
 const APP_ICON_PATH = join(dirname(fileURLToPath(import.meta.url)), 'assets', 'app-icon.png');
-const APP_NAME = 'Mr Claudio Session Assistant';
+const APP_NAME = "Mr Claudio's Assistant";
 
 app.setName(APP_NAME);
 

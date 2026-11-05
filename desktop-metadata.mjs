@@ -35,6 +35,12 @@ async function readMetadataRoot(metadataRoot, metadataByTranscriptId) {
           isArchived: metadata.isArchived === true,
           lastFocusedAt: metadata.lastFocusedAt ?? 0,
           lastTurnEdgeAt: metadata.lastTurnEdgeAt ?? 0,
+          pullRequests: (metadata.prs ?? []).map((pullRequest) => ({
+            number: pullRequest.prNumber,
+            url: pullRequest.url,
+            state: pullRequest.state,
+            autoFix: pullRequest.autoFix === true,
+          })),
         });
       }
     }

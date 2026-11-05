@@ -4,7 +4,7 @@ import {
   acknowledgeSession,
   applyDesktopMetadata,
   applyHookEvent,
-  applyTranscriptMessage,
+  applyTranscriptTail,
   expireFinishedSessions,
   FINISHED_VISIBLE_MS,
   generalLight,
@@ -12,7 +12,12 @@ import {
   sortSessions,
   STATUS,
 } from './session-state.mjs';
-import { lastEntryTimeOf, statusFromTranscriptEntries } from './transcript-scan.mjs';
+import {
+  hasPendingBackgroundAgents,
+  lastEntryTimeOf,
+  statusFromTranscriptEntries,
+  ticketProgressFromEntries,
+} from './transcript-scan.mjs';
 
 const SESSION_ID = 'session-a';
 const CWD = '/Users/dev/projects/sample-app';
@@ -22,9 +27,11 @@ function eventFor(eventName, extraPayload = {}, now = 1000) {
 }
 
 describe('applyHookEvent', () => {
-  it('marks a session finished on Stop', () => {
+  it('marks a session finished on Stop, unless its background agents are still working', () => {
     const result = applyHookEvent(new Map(), eventFor('Stop'));
     assert.equal(result.sessionsById.get(SESSION_ID).status, STATUS.finished);
+    const withAgents = applyHookEvent(new Map(), eventFor('Stop', { transcript_has_pending_agents: true }));
+    assert.equal(withAgents.sessionsById.get(SESSION_ID).status, STATUS.running);
   });
 
   it('keeps the original status time when the status did not change', () => {
@@ -83,22 +90,41 @@ describe('applyHookEvent', () => {
   });
 });
 
-describe('applyTranscriptMessage', () => {
+describe('applyTranscriptTail', () => {
   it('shows the latest transcript text mid-turn, keeping the old text when there is none', () => {
     const afterStop = applyHookEvent(new Map(), eventFor('Stop', { last_assistant_message: 'Old reply.' }, 1000));
     const afterPrompt = applyHookEvent(afterStop.sessionsById, eventFor('UserPromptSubmit', {}, 2000));
-    const midTurn = applyTranscriptMessage(afterPrompt.sessionsById, SESSION_ID, 'Committing PR 1 now.');
+    const ticket = { key: 'ABC-123', stage: 'build', stageStartedAt: 2400, designMode: 'superpowers' };
+    const midTurn = applyTranscriptTail(afterPrompt.sessionsById, SESSION_ID, { lastMessage: 'Committing PR 1 now.', lastEntryAt: 2500, ticket });
     assert.equal(midTurn.get(SESSION_ID).lastMessage, 'Committing PR 1 now.');
     assert.equal(midTurn.get(SESSION_ID).status, STATUS.running);
-    assert.equal(applyTranscriptMessage(midTurn, SESSION_ID, ''), midTurn);
-    assert.equal(applyTranscriptMessage(midTurn, 'unknown', 'Hi.'), midTurn);
+    assert.deepEqual(midTurn.get(SESSION_ID).ticket, ticket);
+    const afterNextStop = applyHookEvent(midTurn, eventFor('Stop', {}, 3000)).sessionsById;
+    assert.deepEqual(afterNextStop.get(SESSION_ID).ticket, ticket);
+    assert.equal(applyTranscriptTail(midTurn, SESSION_ID, { lastMessage: '', lastEntryAt: 2500 }), midTurn);
+    assert.equal(applyTranscriptTail(midTurn, 'unknown', { lastMessage: 'Hi.', lastEntryAt: 2500 }), midTurn);
+  });
+
+  it('moves a permission prompt back to running once the transcript moves past it, but not a question', () => {
+    const permissionEvent = eventFor('Notification', { notification_type: 'permission_prompt', message: 'Claude needs permission' }, 5000);
+    const waitingOnPermission = applyHookEvent(new Map(), permissionEvent).sessionsById;
+    const beforePrompt = applyTranscriptTail(waitingOnPermission, SESSION_ID, { lastMessage: '', lastEntryAt: 4000 });
+    assert.equal(beforePrompt.get(SESSION_ID).status, STATUS.waiting);
+    const approved = applyTranscriptTail(waitingOnPermission, SESSION_ID, { lastMessage: '', lastEntryAt: 6000 }).get(SESSION_ID);
+    assert.equal(approved.status, STATUS.running);
+    assert.equal(approved.waitingReason, '');
+    assert.equal(approved.statusChangedAt, 6000);
+
+    const waitingOnQuestion = applyHookEvent(new Map(), eventFor('Stop', { last_assistant_message: 'Ship it?' }, 5000)).sessionsById;
+    const afterQuestion = applyTranscriptTail(waitingOnQuestion, SESSION_ID, { lastMessage: 'Ship it?', lastEntryAt: 6000 });
+    assert.equal(afterQuestion.get(SESSION_ID).status, STATUS.waiting);
   });
 });
 
 describe('mergeSavedSessions', () => {
   it('keeps the saved state unless the transcript has a newer message, and drops sessions no longer scanned', () => {
     const scannedSessions = [
-      { sessionId: 'quiet', status: STATUS.ended, lastEntryAt: 1000 },
+      { sessionId: 'quiet', status: STATUS.ended, lastEntryAt: 1000, ticket: { key: 'ABC-1', stage: 'ship' } },
       { sessionId: 'moved-on', status: STATUS.finished, lastEntryAt: 3000 },
       { sessionId: 'new', status: STATUS.running, lastEntryAt: 3000 },
     ];
@@ -116,6 +142,7 @@ describe('mergeSavedSessions', () => {
       [['quiet', STATUS.waiting], ['moved-on', STATUS.finished], ['new', STATUS.running]],
     );
     assert.equal(merged[0].waitingReason, 'Claude needs your permission to use Bash');
+    assert.deepEqual(merged[0].ticket, { key: 'ABC-1', stage: 'ship' });
     assert.equal(mergeSavedSessions(scannedSessions, null), scannedSessions);
   });
 });
@@ -144,11 +171,14 @@ describe('generalLight', () => {
 describe('applyDesktopMetadata', () => {
   const finishedSession = { sessionId: 'a', status: STATUS.finished, statusChangedAt: 0, name: 'first prompt text' };
 
-  it('uses the desktop title and archived flag', () => {
-    const metadata = new Map([['a', { title: 'Real title', isArchived: true, lastFocusedAt: 0, lastTurnEdgeAt: 5 }]]);
+  it('uses the desktop title, archived flag and pull requests', () => {
+    const pullRequests = [{ number: 412, url: 'https://github.com/o/r/pull/412', state: 'OPEN', autoFix: true }];
+    const metadata = new Map([['a', { title: 'Real title', isArchived: true, lastFocusedAt: 0, lastTurnEdgeAt: 5, pullRequests }]]);
     const [session] = applyDesktopMetadata([finishedSession], metadata);
     assert.equal(session.name, 'Real title');
     assert.equal(session.isArchived, true);
+    assert.deepEqual(session.pullRequests, pullRequests);
+    assert.deepEqual(applyDesktopMetadata([finishedSession], new Map())[0].pullRequests, []);
   });
 
   it('keeps finished yellow only when the turn ended after you last looked', () => {
@@ -251,6 +281,51 @@ describe('statusFromTranscriptEntries', () => {
     assert.equal(statusFromTranscriptEntries(entries, { lastActivityAt: 0, now }), STATUS.ended);
   });
 
+  it('stays running after the turn ends while background agents have not reported back', () => {
+    const launched = [
+      { type: 'user', message: { content: 'spin up agents' } },
+      { type: 'user', message: { content: [{ type: 'tool_result' }] }, toolUseResult: { status: 'async_launched', agentId: 'agent-1' } },
+      { type: 'user', message: { content: [{ type: 'tool_result' }] }, toolUseResult: { status: 'async_launched', agentId: 'agent-2' } },
+      { type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Agents are running.' }] } },
+    ];
+    const firstReported = [
+      ...launched,
+      { type: 'user', message: { content: '<task-notification>\n<task-id>agent-1</task-id>\n<status>completed</status>' } },
+      { type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'One is back.' }] } },
+    ];
+    const allReported = [
+      ...firstReported,
+      {
+        type: 'attachment',
+        attachment: { type: 'queued_command', prompt: '<task-notification>\n<task-id>agent-2</task-id>\n<status>completed</status>' },
+      },
+      { type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'All back.' }] } },
+    ];
+    assert.equal(hasPendingBackgroundAgents(launched), true);
+    assert.equal(statusFromTranscriptEntries(launched, { lastActivityAt: now, now }), STATUS.running);
+    assert.equal(statusFromTranscriptEntries(firstReported, { lastActivityAt: now, now }), STATUS.running);
+    assert.equal(hasPendingBackgroundAgents(allReported), false);
+    assert.equal(statusFromTranscriptEntries(allReported, { lastActivityAt: now, now }), STATUS.finished);
+
+    const interimReport = [
+      ...allReported,
+      { type: 'user', message: { content: [{ type: 'tool_result' }] }, toolUseResult: { status: 'async_launched', agentId: 'agent-3' } },
+      {
+        type: 'queue-operation',
+        content: '<task-notification>\n<task-id>agent-3</task-id>\n<status>completed</status>\n<summary>Agent "Build" is waiting on its own background work</summary>',
+      },
+    ];
+    const finalReport = [
+      ...interimReport,
+      {
+        type: 'queue-operation',
+        content: '<task-notification>\n<task-id>agent-3</task-id>\n<status>completed</status>\n<summary>Agent "Build" finished</summary>',
+      },
+    ];
+    assert.equal(hasPendingBackgroundAgents(interimReport), true);
+    assert.equal(hasPendingBackgroundAgents(finalReport), false);
+  });
+
   it('times the last message, ignoring later bookkeeping entries', () => {
     const entries = [
       { type: 'user', timestamp: '2026-11-05T20:00:00.000Z', message: { content: 'hi' } },
@@ -259,5 +334,64 @@ describe('statusFromTranscriptEntries', () => {
     ];
     assert.equal(lastEntryTimeOf(entries), Date.parse('2026-11-05T20:00:05.000Z'));
     assert.equal(lastEntryTimeOf([]), 0);
+  });
+});
+
+describe('ticketProgressFromEntries', () => {
+  const at = (minute) => `2026-11-05T10:${String(minute).padStart(2, '0')}:00.000Z`;
+  const command = (minute, name, args = '') => ({
+    type: 'user',
+    timestamp: at(minute),
+    gitBranch: 'claude/search-feature-1a2b3c',
+    message: { content: `<command-name>/${name}</command-name>\n<command-args>${args}</command-args>` },
+  });
+  const toolUse = (minute, name, input = {}, gitBranch = 'dev/abc-123-search') => ({
+    type: 'assistant',
+    timestamp: at(minute),
+    gitBranch,
+    message: { content: [{ type: 'tool_use', name, input }] },
+  });
+  const skill = (minute, name) => toolUse(minute, 'Skill', { skill: name });
+
+  it('walks a superpowers run through every stage, ignoring design docs written before the build', () => {
+    const entries = [
+      command(0, 'zero-to-shipped', 'add search to the list page'),
+      skill(1, 'initialize-worktree'),
+      skill(5, 'superpowers:brainstorming'),
+      toolUse(20, 'Write', { file_path: 'docs/design.md' }),
+      skill(40, 'superpowers:writing-plans'),
+      skill(50, 'superpowers:subagent-driven-development'),
+    ];
+    const building = ticketProgressFromEntries(entries, null);
+    assert.equal(building.key, 'ABC-123');
+    assert.equal(building.stage, 'build');
+    assert.equal(building.stageStartedAt, Date.parse(at(50)));
+
+    const autoFixEvent = { type: 'user', timestamp: at(59), message: { content: '<ci-monitor-event>"Auto-fix pull requests" is watching PR #412' } };
+    const later = [skill(52, 'taking-evidence'), skill(55, 'ship-it'), autoFixEvent];
+    const inFeedback = ticketProgressFromEntries(later, building);
+    assert.equal(inFeedback.stage, 'feedback');
+    assert.equal(inFeedback.stageStartedAt, Date.parse(at(59)));
+    assert.equal(ticketProgressFromEntries([skill(52, 'taking-evidence')], inFeedback).stage, 'feedback');
+  });
+
+  it('starts the build at the first edit after plan approval, or right away for a direct edit', () => {
+    const planned = ticketProgressFromEntries(
+      [
+        command(0, 'zero-to-shipped', 'XYZ-7'),
+        toolUse(2, 'EnterPlanMode', {}, 'claude/quiet-river-0f9e8d'),
+        toolUse(5, 'Write', { file_path: 'plan.html' }, 'claude/quiet-river-0f9e8d'),
+        toolUse(9, 'ExitPlanMode', {}, 'claude/quiet-river-0f9e8d'),
+        toolUse(12, 'Edit', { file_path: 'src/app.ts' }, 'claude/quiet-river-0f9e8d'),
+      ],
+      null,
+    );
+    assert.equal(planned.key, 'XYZ-7');
+    assert.equal(planned.stage, 'build');
+    assert.equal(planned.stageStartedAt, Date.parse(at(12)));
+
+    const direct = ticketProgressFromEntries([command(0, 'zero-to-shipped'), toolUse(3, 'Edit', { file_path: 'a.ts' })], null);
+    assert.equal(direct.stageStartedAt, Date.parse(at(3)));
+    assert.equal(ticketProgressFromEntries([skill(1, 'ship-it')], null), null);
   });
 });

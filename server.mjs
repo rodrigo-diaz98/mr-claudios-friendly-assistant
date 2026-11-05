@@ -8,7 +8,7 @@ import {
   acknowledgeSession,
   applyDesktopMetadata,
   applyHookEvent,
-  applyTranscriptMessage,
+  applyTranscriptTail,
   expireFinishedSessions,
   generalLight,
   mergeSavedSessions,
@@ -17,10 +17,13 @@ import {
 } from './session-state.mjs';
 import { readDesktopMetadata } from './desktop-metadata.mjs';
 import {
+  hasPendingBackgroundAgents,
+  lastEntryTimeOf,
   lastMessageFromTranscriptEntries,
   parseTranscriptLines,
   readTranscriptTail,
   scanTranscripts,
+  ticketProgressFromEntries,
   transcriptAsksQuestion,
 } from './transcript-scan.mjs';
 
@@ -114,7 +117,13 @@ async function refreshTranscriptMessage(sessionId) {
   }
   transcriptSizeById.set(sessionId, fileStats.size);
   const tailEntries = parseTranscriptLines(await readTranscriptTail(session.transcriptPath, fileStats.size));
-  setSessionsById(applyTranscriptMessage(sessionsById, sessionId, lastMessageFromTranscriptEntries(tailEntries)));
+  setSessionsById(
+    applyTranscriptTail(sessionsById, sessionId, {
+      lastMessage: lastMessageFromTranscriptEntries(tailEntries),
+      lastEntryAt: lastEntryTimeOf(tailEntries),
+      ticket: ticketProgressFromEntries(tailEntries, session.ticket ?? null),
+    }),
+  );
 }
 
 function refreshTranscriptSoon(sessionId) {
@@ -148,17 +157,22 @@ function sendJson(response, statusCode, body) {
   response.end(JSON.stringify(body));
 }
 
-async function withTranscriptQuestion(eventName, payload) {
+async function withTranscriptFacts(eventName, payload) {
   if (eventName !== 'Stop' || !payload.transcript_path) {
     return payload;
   }
   const rawTranscript = await readFile(payload.transcript_path, 'utf8').catch(() => '');
-  return { ...payload, transcript_asks_question: transcriptAsksQuestion(parseTranscriptLines(rawTranscript)) };
+  const entries = parseTranscriptLines(rawTranscript);
+  return {
+    ...payload,
+    transcript_asks_question: transcriptAsksQuestion(entries),
+    transcript_has_pending_agents: hasPendingBackgroundAgents(entries),
+  };
 }
 
 async function handleHookEvent(request, response) {
   const { eventName, payload: hookPayload } = JSON.parse(await readRequestBody(request));
-  const payload = await withTranscriptQuestion(eventName, hookPayload);
+  const payload = await withTranscriptFacts(eventName, hookPayload);
   const result = applyHookEvent(sessionsById, { eventName, payload, now: Date.now() });
   setSessionsById(result.sessionsById);
   response.writeHead(204);

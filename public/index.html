@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mr Claudio Session Assistant</title>
+  <title>Mr Claudio's Assistant</title>
   <style>
     body { font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 12px; background: #22292e; color: #eceae4; font-size: 13px; }
     header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -14,7 +14,20 @@
     .light.grey { background: #6e7781; }
     .light.red { background: #e5534b; }
     .meta.overdue { color: #e5534b; }
+    .ticket-key { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #96a0a6; margin-right: 6px; }
+    .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 6px 0 4px; }
+    .stage { font-size: 10px; color: #6e7781; text-align: center; }
+    .stage-bar { height: 4px; border-radius: 2px; background: #3a4147; margin-bottom: 3px; }
+    .stage.done { color: #96a0a6; }
+    .stage.done .stage-bar { background: #2f6f3e; }
+    .stage.current { color: #eceae4; font-weight: 600; }
+    .stage.current.green .stage-bar { background: #3fb950; }
+    .stage.current.yellow .stage-bar { background: #d9b84d; }
+    .stage.current.orange .stage-bar { background: #e8833a; }
+    .stage.current.grey .stage-bar { background: #6e7781; }
+    .stage.current.red .stage-bar { background: #e5534b; }
     h1 { font-size: 14px; margin: 0; font-weight: 600; }
+    .summary { font-size: 12px; color: #96a0a6; margin-top: 2px; }
     .general-light { width: 16px; height: 16px; }
     .general-light.orange { animation: flash 0.9s ease-in-out infinite; }
     @keyframes flash { 0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px rgba(232, 131, 58, 0.7); } 50% { opacity: 0.25; box-shadow: none; } }
@@ -26,7 +39,7 @@
     .open-button { font-size: 12px; color: #eceae4; background: #2c3236; border-radius: 6px; padding: 4px 10px; text-decoration: none; white-space: nowrap; }
     .open-button:hover { background: #3a4147; }
     .empty { color: #96a0a6; }
-    .archived-toggle { margin-left: auto; font-size: 11px; color: #96a0a6; background: none; border: 1px solid #2c3236; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+    .archived-toggle { display: block; margin: 10px auto 0; font-size: 11px; color: #96a0a6; background: none; border: 1px solid #2c3236; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
     .archived-toggle:hover { color: #eceae4; }
     li.archived { opacity: 0.55; }
 
@@ -121,15 +134,20 @@
       <text class="question" x="69" y="12">?</text>
     </svg>
     <span id="general-light" class="light general-light grey"></span>
-    <h1>Mr Claudio Session Assistant</h1>
-    <button id="archived-toggle" class="archived-toggle" type="button"></button>
+    <div>
+      <h1>Mr Claudio's Assistant</h1>
+      <div id="summary" class="summary"></div>
+    </div>
   </header>
   <ul id="session-list"></ul>
+  <button id="archived-toggle" class="archived-toggle" type="button"></button>
   <script>
     const statusLabels = { waiting: 'Needs you', finished: 'Finished', running: 'Running', ended: 'Idle' };
     const lightByStatus = { waiting: 'orange', finished: 'yellow', running: 'green', ended: 'grey' };
     const mascotStateByLight = { grey: 'sleeping', green: 'running', yellow: 'finished', orange: 'waiting' };
     const OVERDUE_AFTER_MS = 10 * 60 * 1000;
+    const TICKET_STAGES = ['design', 'build', 'test', 'ship', 'feedback'];
+    const stageLabels = { design: 'Design', build: 'Build', test: 'Test', ship: 'Ship', feedback: 'Feedback' };
     let showArchived = false;
     let latestState = null;
 
@@ -153,18 +171,67 @@
       });
     }
 
+    function summaryText(activeSessions) {
+      const countOf = (status) => activeSessions.filter((session) => session.status === status).length;
+      const parts = [
+        [countOf('waiting'), 'needs you', 'need you'],
+        [countOf('running'), 'running', 'running'],
+        [countOf('finished'), 'finished', 'finished'],
+      ]
+        .filter(([count]) => count > 0)
+        .map(([count, singular, plural]) => `${count} ${count === 1 ? singular : plural}`);
+      return parts.length > 0 ? parts.join(' · ') : 'All quiet';
+    }
+
+    function isMerged(session) {
+      return session.pullRequests.length > 0 && session.pullRequests.every((pullRequest) => pullRequest.state === 'MERGED');
+    }
+
+    function renderStages(session, lightColor) {
+      const stages = document.createElement('div');
+      stages.className = 'stages';
+      const currentIndex = isMerged(session) ? TICKET_STAGES.length : TICKET_STAGES.indexOf(session.ticket.stage);
+      TICKET_STAGES.forEach((stageName, index) => {
+        const stage = document.createElement('div');
+        stage.className = index < currentIndex ? 'stage done' : index === currentIndex ? `stage current ${lightColor}` : 'stage';
+        const bar = document.createElement('div');
+        bar.className = 'stage-bar';
+        stage.append(bar, stageLabels[stageName]);
+        stages.append(stage);
+      });
+      return stages;
+    }
+
+    function ticketMetaText(session, statusText) {
+      const parts = isMerged(session) ? ['Merged', statusText] : [statusText];
+      if (session.pullRequests.length > 0) {
+        parts.push(`PR ${session.pullRequests.map((pullRequest) => pullRequest.number).sort((a, b) => a - b).join(' · ')}`);
+      }
+      if (session.pullRequests.some((pullRequest) => pullRequest.autoFix && pullRequest.state === 'OPEN')) {
+        parts.push('Auto-fix');
+      }
+      return parts.join(' · ');
+    }
+
     function renderSessionRow(session) {
       const row = document.createElement('li');
       row.className = session.isArchived ? 'archived' : '';
 
+      const lightColor = isOverdue(session) ? 'red' : lightByStatus[session.status];
       const light = document.createElement('span');
-      light.className = `light ${isOverdue(session) ? 'red' : lightByStatus[session.status]}`;
+      light.className = `light ${lightColor}`;
 
       const textBlock = document.createElement('div');
       textBlock.style.minWidth = '0';
       const name = document.createElement('div');
       name.className = 'name';
-      name.textContent = session.name;
+      if (session.ticket?.key) {
+        const key = document.createElement('span');
+        key.className = 'ticket-key';
+        key.textContent = session.ticket.key;
+        name.append(key);
+      }
+      name.append(session.name);
       const lastMessage = document.createElement('div');
       lastMessage.className = 'last-message';
       lastMessage.textContent =
@@ -173,8 +240,13 @@
       meta.className = isOverdue(session) ? 'meta overdue' : 'meta';
       const statusText =
         session.status === 'waiting' ? `${statusLabels.waiting} · ${waitingFor(session)}` : statusLabels[session.status];
-      meta.textContent = `${statusText} · ${session.cwd.split('/').pop()}`;
-      textBlock.append(name, lastMessage, meta);
+      if (session.ticket) {
+        meta.textContent = ticketMetaText(session, statusText);
+        textBlock.append(name, renderStages(session, lightColor), lastMessage, meta);
+      } else {
+        meta.textContent = `${statusText} · ${session.cwd.split('/').pop()}`;
+        textBlock.append(name, lastMessage, meta);
+      }
 
       const openLink = document.createElement('a');
       openLink.className = 'open-button';
@@ -189,6 +261,7 @@
     function render() {
       document.getElementById('mascot').setAttribute('class', `mascot ${mascotStateByLight[latestState.light]}`);
       document.getElementById('general-light').setAttribute('class', `light general-light ${latestState.light}`);
+      document.getElementById('summary').textContent = summaryText(latestState.sessions.filter((session) => !session.isArchived));
 
       const archivedCount = latestState.sessions.filter((session) => session.isArchived).length;
       document.getElementById('archived-toggle').textContent = showArchived

@@ -34,6 +34,9 @@ export function statusFromHookEvent(eventName, payload) {
     return STATUS.running;
   }
   if (eventName === 'Stop') {
+    if (payload.transcript_has_pending_agents) {
+      return STATUS.running;
+    }
     return payload.transcript_asks_question || endsWithQuestion(payload.last_assistant_message)
       ? STATUS.waiting
       : STATUS.finished;
@@ -67,6 +70,7 @@ export function applyHookEvent(sessionsById, { eventName, payload, now }) {
       ? payload.last_assistant_message.replace(/\s+/g, ' ').trim().slice(0, 140)
       : previousSession?.lastMessage ?? '',
     waitingReason: eventName === 'Notification' ? payload.message ?? '' : '',
+    ticket: previousSession?.ticket ?? null,
   };
 
   const nextSessionsById = new Map(sessionsById);
@@ -75,13 +79,27 @@ export function applyHookEvent(sessionsById, { eventName, payload, now }) {
   return { sessionsById: nextSessionsById };
 }
 
-export function applyTranscriptMessage(sessionsById, sessionId, lastMessage) {
+export function applyTranscriptTail(sessionsById, sessionId, { lastMessage, lastEntryAt, ticket }) {
   const session = sessionsById.get(sessionId);
-  if (!session || !lastMessage || session.lastMessage === lastMessage) {
+  if (!session) {
     return sessionsById;
   }
+  const nextLastMessage = lastMessage || session.lastMessage;
+  const nextTicket = ticket ?? session.ticket ?? null;
+  const ticketChanged = JSON.stringify(nextTicket) !== JSON.stringify(session.ticket ?? null);
+  const movedPastPermission =
+    session.status === STATUS.waiting && Boolean(session.waitingReason) && lastEntryAt > session.statusChangedAt;
+  if (!movedPastPermission && !ticketChanged && nextLastMessage === session.lastMessage) {
+    return sessionsById;
+  }
+  const updatedSession = { ...session, lastMessage: nextLastMessage, ticket: nextTicket };
   const nextSessionsById = new Map(sessionsById);
-  nextSessionsById.set(sessionId, { ...session, lastMessage });
+  nextSessionsById.set(
+    sessionId,
+    movedPastPermission
+      ? { ...updatedSession, status: STATUS.running, statusChangedAt: lastEntryAt, waitingReason: '' }
+      : updatedSession,
+  );
   return nextSessionsById;
 }
 
@@ -92,7 +110,9 @@ export function mergeSavedSessions(scannedSessions, savedState) {
   const savedSessionsById = new Map(savedState.sessions.map((session) => [session.sessionId, session]));
   return scannedSessions.map((scannedSession) => {
     const savedSession = savedSessionsById.get(scannedSession.sessionId);
-    return savedSession && savedState.savedAt >= scannedSession.lastEntryAt ? savedSession : scannedSession;
+    return savedSession && savedState.savedAt >= scannedSession.lastEntryAt
+      ? { ...savedSession, ticket: scannedSession.ticket }
+      : scannedSession;
   });
 }
 
@@ -100,7 +120,7 @@ export function applyDesktopMetadata(sessions, metadataByTranscriptId) {
   return sessions.map((session) => {
     const metadata = metadataByTranscriptId.get(session.sessionId);
     if (!metadata) {
-      return { ...session, isArchived: false };
+      return { ...session, isArchived: false, pullRequests: [] };
     }
     const finishedAndAlreadySeen =
       session.status === STATUS.finished && metadata.lastFocusedAt >= metadata.lastTurnEdgeAt;
@@ -108,6 +128,7 @@ export function applyDesktopMetadata(sessions, metadataByTranscriptId) {
       ...session,
       name: metadata.title || session.name,
       isArchived: metadata.isArchived,
+      pullRequests: metadata.pullRequests,
       status: finishedAndAlreadySeen ? STATUS.ended : session.status,
     };
   });

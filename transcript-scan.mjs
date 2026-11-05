@@ -8,6 +8,21 @@ const WRAP_UP_TOOL_NAME = 'mcp__ccd_turn__wrap_up';
 const NAME_MAX_LENGTH = 80;
 const LAST_MESSAGE_MAX_LENGTH = 140;
 const TAIL_BYTES = 512 * 1024;
+const TASK_NOTIFICATION_ID_PATTERN = /<task-notification>[\s\S]*?<task-id>([^<]+)<\/task-id>/;
+const INTERIM_REPORT_PATTERN = /<summary>[^<]*waiting on its own background work<\/summary>/;
+const TICKET_STAGES = ['design', 'build', 'test', 'ship', 'feedback'];
+const STAGE_BY_SKILL = new Map([
+  ['superpowers:executing-plans', 'build'],
+  ['superpowers:subagent-driven-development', 'build'],
+  ['taking-evidence', 'test'],
+  ['ship-it', 'ship'],
+  ['review-pr-comments', 'feedback'],
+]);
+const DESIGN_SKILLS = new Set(['superpowers:brainstorming', 'superpowers:writing-plans']);
+const EDIT_TOOL_NAMES = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+const COMMAND_NAME_PATTERN = /<command-name>\/?([^<]+)<\/command-name>/;
+const TICKET_KEY_IN_BRANCH_PATTERN = /(?:^|\/)([a-z]{2,10}-\d+)(?=-|$)/i;
+const TICKET_KEY_IN_TEXT_PATTERN = /\b([A-Z]{2,10}-\d+)\b/;
 
 export function parseTranscriptLines(rawText) {
   const entries = [];
@@ -24,6 +39,103 @@ export function parseTranscriptLines(rawText) {
 
 function lastMessageEntryOf(entries) {
   return entries.findLast((entry) => entry.type === 'user' || entry.type === 'assistant');
+}
+
+function notificationTextOf(entry) {
+  if (entry.type === 'queue-operation') {
+    return entry.content;
+  }
+  if (entry.type === 'attachment') {
+    return entry.attachment?.prompt;
+  }
+  return entry.type === 'user' ? entry.message?.content : null;
+}
+
+export function hasPendingBackgroundAgents(entries) {
+  const pendingAgentIds = new Set();
+  for (const entry of entries) {
+    if (entry.toolUseResult?.status === 'async_launched' && entry.toolUseResult.agentId) {
+      pendingAgentIds.add(entry.toolUseResult.agentId);
+    }
+    const notificationText = notificationTextOf(entry);
+    const notifiedAgentId = typeof notificationText === 'string' ? notificationText.match(TASK_NOTIFICATION_ID_PATTERN)?.[1] : null;
+    if (notifiedAgentId && INTERIM_REPORT_PATTERN.test(notificationText)) {
+      pendingAgentIds.add(notifiedAgentId);
+    } else if (notifiedAgentId) {
+      pendingAgentIds.delete(notifiedAgentId);
+    }
+  }
+  return pendingAgentIds.size > 0;
+}
+
+function commandNameOf(entry) {
+  const content = entry.type === 'user' ? entry.message?.content : null;
+  return typeof content === 'string' ? content.match(COMMAND_NAME_PATTERN)?.[1] ?? null : null;
+}
+
+function toolUsesOf(entry) {
+  const content = entry.type === 'assistant' ? entry.message?.content : null;
+  return Array.isArray(content) ? content.filter((part) => part.type === 'tool_use') : [];
+}
+
+function isAutoFixEvent(entry) {
+  const text = notificationTextOf(entry);
+  return typeof text === 'string' && text.trimStart().startsWith('<ci-monitor-event');
+}
+
+function ticketKeyIn(text) {
+  return typeof text === 'string' ? text.match(TICKET_KEY_IN_TEXT_PATTERN)?.[1] ?? null : null;
+}
+
+function advanceStage(progress, stage, at) {
+  return TICKET_STAGES.indexOf(stage) > TICKET_STAGES.indexOf(progress.stage)
+    ? { ...progress, stage, stageStartedAt: at }
+    : progress;
+}
+
+export function ticketProgressFromEntries(entries, previousProgress) {
+  let progress = previousProgress;
+  for (const entry of entries) {
+    const at = entry.timestamp ? Date.parse(entry.timestamp) : 0;
+    const toolUses = toolUsesOf(entry);
+    const skillNames = [commandNameOf(entry), ...toolUses.filter((toolUse) => toolUse.name === 'Skill').map((toolUse) => toolUse.input?.skill)];
+    if (!progress) {
+      if (skillNames.includes('zero-to-shipped')) {
+        const args = typeof entry.message?.content === 'string' ? entry.message.content : toolUses.map((toolUse) => toolUse.input?.args).join(' ');
+        progress = { key: ticketKeyIn(args), stage: 'design', stageStartedAt: at, designMode: 'direct' };
+      }
+      continue;
+    }
+
+    const branchKey = entry.gitBranch?.match(TICKET_KEY_IN_BRANCH_PATTERN)?.[1]?.toUpperCase();
+    if (branchKey && branchKey !== progress.key) {
+      progress = { ...progress, key: branchKey };
+    }
+    for (const skillName of skillNames) {
+      if (DESIGN_SKILLS.has(skillName)) {
+        progress = { ...progress, designMode: 'superpowers' };
+      } else if (STAGE_BY_SKILL.has(skillName)) {
+        progress = advanceStage(progress, STAGE_BY_SKILL.get(skillName), at);
+      }
+    }
+    for (const toolUse of toolUses) {
+      if (toolUse.name === 'EnterPlanMode') {
+        progress = { ...progress, designMode: 'plan' };
+      } else if (toolUse.name === 'ExitPlanMode') {
+        progress = { ...progress, designMode: 'direct' };
+      } else if (EDIT_TOOL_NAMES.has(toolUse.name) && progress.designMode === 'direct') {
+        progress = advanceStage(progress, 'build', at);
+      } else if (!progress.key && toolUse.name.endsWith('getJiraIssue')) {
+        progress = { ...progress, key: ticketKeyIn(toolUse.input?.issueIdOrKey) };
+      } else if (!progress.key && toolUse.name === 'Skill' && toolUse.input?.skill === 'initialize-worktree') {
+        progress = { ...progress, key: ticketKeyIn(toolUse.input?.args) };
+      }
+    }
+    if (isAutoFixEvent(entry)) {
+      progress = advanceStage(progress, 'feedback', at);
+    }
+  }
+  return progress;
 }
 
 export function lastEntryTimeOf(entries) {
@@ -64,6 +176,9 @@ export function statusFromTranscriptEntries(entries, { lastActivityAt, now }) {
   const lastMessageEntry = lastMessageEntryOf(entries);
   if (!lastMessageEntry) {
     return STATUS.ended;
+  }
+  if (hasPendingBackgroundAgents(entries) && now - lastActivityAt <= QUIET_AFTER_MS) {
+    return STATUS.running;
   }
   if (lastMessageEntry.type === 'assistant' && lastMessageEntry.message?.stop_reason === 'end_turn') {
     return transcriptAsksQuestion(entries) ? STATUS.waiting : STATUS.finished;
@@ -156,6 +271,7 @@ export async function scanTranscripts({ projectsDir, now }) {
       transcriptPath,
       name: nameFromTranscriptEntries(entries, cwd),
       lastMessage: lastMessageFromTranscriptEntries(entries),
+      ticket: ticketProgressFromEntries(entries, null),
     });
   }
   return sessions;

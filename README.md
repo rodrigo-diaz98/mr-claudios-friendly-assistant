@@ -1,4 +1,4 @@
-# Mr Claudio Session Assistant
+# Mr Claudio's Assistant
 
 A small always-on-top Electron window for macOS that shows the state of your Claude Code sessions, so you know when one needs you.
 
