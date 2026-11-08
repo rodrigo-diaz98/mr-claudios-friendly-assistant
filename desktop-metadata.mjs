@@ -33,6 +33,7 @@ async function readMetadataRoot(metadataRoot, metadataByTranscriptId) {
         metadataByTranscriptId.set(metadata.cliSessionId, {
           title: metadata.title ?? '',
           isArchived: metadata.isArchived === true,
+          isSideQuestion: metadata.spawnedFrom?.btw === true,
           lastFocusedAt: metadata.lastFocusedAt ?? 0,
           lastTurnEdgeAt: metadata.lastTurnEdgeAt ?? 0,
           pullRequests: (metadata.prs ?? []).map((pullRequest) => ({

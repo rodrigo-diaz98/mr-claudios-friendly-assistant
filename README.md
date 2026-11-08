@@ -14,7 +14,7 @@ Each session gets a light:
 
 A waiting session shows how long it has waited and, for a permission prompt, what Claude needs, like "Claude needs your permission to use Bash". Other sessions show Claude's latest message, updated while it works. A session stays green while background agents it launched are still working. A session you interrupt turns grey and says "Stopped by you" until you send a new prompt.
 
-A gray line under the title counts your sessions by status, like "1 needs you · 2 running", or says "All quiet". Archived sessions are hidden until you click "Show archived" at the bottom.
+A gray line under the title counts your sessions by status, like "1 needs you · 2 running", or says "All quiet". Archived sessions are hidden until you click "Show archived" at the bottom. `/btw` side questions are always hidden, because they show inside the session you asked them from.
 
 The window sits in the bottom-right corner and pops up (without taking focus) when a session turns orange or yellow.
 

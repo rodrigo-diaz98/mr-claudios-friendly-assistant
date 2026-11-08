@@ -199,6 +199,9 @@ describe('applyDesktopMetadata', () => {
     assert.equal(session.isArchived, true);
     assert.deepEqual(session.pullRequests, pullRequests);
     assert.deepEqual(applyDesktopMetadata([finishedSession], new Map())[0].pullRequests, []);
+
+    const sideQuestion = new Map([['a', { title: 'Real title', isArchived: false, isSideQuestion: true, pullRequests: [] }]]);
+    assert.deepEqual(applyDesktopMetadata([finishedSession], sideQuestion), []);
   });
 
   it('keeps finished yellow only when the turn ended after you last looked', () => {

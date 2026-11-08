@@ -121,7 +121,8 @@ export function mergeSavedSessions(scannedSessions, savedState) {
 }
 
 export function applyDesktopMetadata(sessions, metadataByTranscriptId) {
-  return sessions.map((session) => {
+  const ownSessions = sessions.filter((session) => !metadataByTranscriptId.get(session.sessionId)?.isSideQuestion);
+  return ownSessions.map((session) => {
     const metadata = metadataByTranscriptId.get(session.sessionId);
     if (!metadata) {
       return { ...session, isArchived: false, pullRequests: [] };
