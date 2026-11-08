@@ -151,7 +151,7 @@
     let showArchived = false;
     let latestState = null;
 
-    function waitingFor(session) {
+    function timeSinceChange(session) {
       const minutes = Math.floor((Date.now() - session.statusChangedAt) / 60_000);
       if (minutes < 1) {
         return 'just now';
@@ -239,7 +239,11 @@
       const meta = document.createElement('div');
       meta.className = isOverdue(session) ? 'meta overdue' : 'meta';
       const statusText =
-        session.status === 'waiting' ? `${statusLabels.waiting} · ${waitingFor(session)}` : statusLabels[session.status];
+        session.status === 'waiting'
+          ? `${statusLabels.waiting} · ${timeSinceChange(session)}`
+          : session.status === 'ended' && session.interrupted
+            ? `Stopped by you · ${timeSinceChange(session)}`
+            : statusLabels[session.status];
       if (session.ticket) {
         meta.textContent = ticketMetaText(session, statusText);
         textBlock.append(name, renderStages(session, lightColor), lastMessage, meta);

@@ -20,7 +20,8 @@ const STAGE_BY_SKILL = new Map([
 ]);
 const DESIGN_SKILLS = new Set(['superpowers:brainstorming', 'superpowers:writing-plans']);
 const EDIT_TOOL_NAMES = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
-const COMMAND_NAME_PATTERN = /<command-name>\/?([^<]+)<\/command-name>/;
+const INTERRUPT_MARKER = '[Request interrupted by user';
+const COMMAND_NAME_PATTERN = /^(?:<command-message>[^<]*<\/command-message>\s*)?<command-name>\/?([^<]+)<\/command-name>/;
 const TICKET_KEY_IN_BRANCH_PATTERN = /(?:^|\/)([a-z]{2,10}-\d+)(?=-|$)/i;
 const TICKET_KEY_IN_TEXT_PATTERN = /\b([A-Z]{2,10}-\d+)\b/;
 
@@ -172,9 +173,37 @@ export function transcriptAsksQuestion(entries) {
   );
 }
 
+function userTextOf(entry) {
+  const content = entry.message?.content;
+  if (typeof content === 'string') {
+    return content;
+  }
+  return Array.isArray(content) ? content.filter((part) => part.type === 'text').map((part) => part.text).join(' ') : '';
+}
+
+function isInterruptMarker(entry) {
+  return entry.type === 'user' && userTextOf(entry).trimStart().startsWith(INTERRUPT_MARKER);
+}
+
+function continuesAfterInterrupt(entry) {
+  if (entry.type === 'assistant') {
+    return true;
+  }
+  return entry.type === 'user' && typeof entry.message?.content === 'string' && !entry.message.content.startsWith('<task-notification>');
+}
+
+export function interruptedAtOf(entries) {
+  const mainEntries = entries.filter((entry) => !entry.isSidechain);
+  const interruptIndex = mainEntries.findLastIndex(isInterruptMarker);
+  if (interruptIndex === -1 || mainEntries.slice(interruptIndex + 1).some(continuesAfterInterrupt)) {
+    return 0;
+  }
+  return Date.parse(mainEntries[interruptIndex].timestamp) || 0;
+}
+
 export function statusFromTranscriptEntries(entries, { lastActivityAt, now }) {
   const lastMessageEntry = lastMessageEntryOf(entries);
-  if (!lastMessageEntry) {
+  if (!lastMessageEntry || interruptedAtOf(entries) > 0) {
     return STATUS.ended;
   }
   if (hasPendingBackgroundAgents(entries) && now - lastActivityAt <= QUIET_AFTER_MS) {
@@ -267,6 +296,7 @@ export async function scanTranscripts({ projectsDir, now }) {
       status: statusFromTranscriptEntries(entries, { lastActivityAt: fileStats.mtimeMs, now }),
       statusChangedAt: fileStats.mtimeMs,
       lastEntryAt: lastEntryTimeOf(entries),
+      interrupted: interruptedAtOf(entries) > 0,
       cwd,
       transcriptPath,
       name: nameFromTranscriptEntries(entries, cwd),

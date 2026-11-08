@@ -79,7 +79,18 @@ export function applyHookEvent(sessionsById, { eventName, payload, now }) {
   return { sessionsById: nextSessionsById };
 }
 
-export function applyTranscriptTail(sessionsById, sessionId, { lastMessage, lastEntryAt, ticket }) {
+function statusChangeFromTail(session, { lastEntryAt, interruptedAt }) {
+  const isActive = session.status === STATUS.running || session.status === STATUS.waiting;
+  if (isActive && interruptedAt > session.statusChangedAt) {
+    return { status: STATUS.ended, statusChangedAt: interruptedAt, waitingReason: '', interrupted: true };
+  }
+  if (session.status === STATUS.waiting && Boolean(session.waitingReason) && lastEntryAt > session.statusChangedAt) {
+    return { status: STATUS.running, statusChangedAt: lastEntryAt, waitingReason: '' };
+  }
+  return null;
+}
+
+export function applyTranscriptTail(sessionsById, sessionId, { lastMessage, lastEntryAt, ticket, interruptedAt = 0 }) {
   const session = sessionsById.get(sessionId);
   if (!session) {
     return sessionsById;
@@ -87,19 +98,12 @@ export function applyTranscriptTail(sessionsById, sessionId, { lastMessage, last
   const nextLastMessage = lastMessage || session.lastMessage;
   const nextTicket = ticket ?? session.ticket ?? null;
   const ticketChanged = JSON.stringify(nextTicket) !== JSON.stringify(session.ticket ?? null);
-  const movedPastPermission =
-    session.status === STATUS.waiting && Boolean(session.waitingReason) && lastEntryAt > session.statusChangedAt;
-  if (!movedPastPermission && !ticketChanged && nextLastMessage === session.lastMessage) {
+  const statusChange = statusChangeFromTail(session, { lastEntryAt, interruptedAt });
+  if (!statusChange && !ticketChanged && nextLastMessage === session.lastMessage) {
     return sessionsById;
   }
-  const updatedSession = { ...session, lastMessage: nextLastMessage, ticket: nextTicket };
   const nextSessionsById = new Map(sessionsById);
-  nextSessionsById.set(
-    sessionId,
-    movedPastPermission
-      ? { ...updatedSession, status: STATUS.running, statusChangedAt: lastEntryAt, waitingReason: '' }
-      : updatedSession,
-  );
+  nextSessionsById.set(sessionId, { ...session, lastMessage: nextLastMessage, ticket: nextTicket, ...statusChange });
   return nextSessionsById;
 }
 

@@ -14,6 +14,7 @@ import {
 } from './session-state.mjs';
 import {
   hasPendingBackgroundAgents,
+  interruptedAtOf,
   lastEntryTimeOf,
   statusFromTranscriptEntries,
   ticketProgressFromEntries,
@@ -118,6 +119,25 @@ describe('applyTranscriptTail', () => {
     const waitingOnQuestion = applyHookEvent(new Map(), eventFor('Stop', { last_assistant_message: 'Ship it?' }, 5000)).sessionsById;
     const afterQuestion = applyTranscriptTail(waitingOnQuestion, SESSION_ID, { lastMessage: 'Ship it?', lastEntryAt: 6000 });
     assert.equal(afterQuestion.get(SESSION_ID).status, STATUS.waiting);
+  });
+
+  it('turns a running or permission-waiting session idle when you interrupt it, until your next prompt', () => {
+    const running = applyHookEvent(new Map(), eventFor('UserPromptSubmit', {}, 2000)).sessionsById;
+    const stopped = applyTranscriptTail(running, SESSION_ID, { lastMessage: '', lastEntryAt: 2500, interruptedAt: 2500 }).get(SESSION_ID);
+    assert.equal(stopped.status, STATUS.ended);
+    assert.equal(stopped.interrupted, true);
+    assert.equal(stopped.statusChangedAt, 2500);
+
+    const permissionEvent = eventFor('Notification', { notification_type: 'permission_prompt', message: 'Claude needs permission' }, 5000);
+    const waitingOnPermission = applyHookEvent(new Map(), permissionEvent).sessionsById;
+    const stoppedAtPrompt = applyTranscriptTail(waitingOnPermission, SESSION_ID, { lastMessage: '', lastEntryAt: 6000, interruptedAt: 6000 });
+    assert.equal(stoppedAtPrompt.get(SESSION_ID).status, STATUS.ended);
+    assert.equal(stoppedAtPrompt.get(SESSION_ID).waitingReason, '');
+
+    const resumed = applyHookEvent(new Map([[SESSION_ID, stopped]]), eventFor('UserPromptSubmit', {}, 3000)).sessionsById;
+    assert.equal(resumed.get(SESSION_ID).interrupted, undefined);
+    const staleInterrupt = applyTranscriptTail(resumed, SESSION_ID, { lastMessage: '', lastEntryAt: 3100, interruptedAt: 2500 });
+    assert.equal(staleInterrupt.get(SESSION_ID).status, STATUS.running);
   });
 });
 
@@ -276,6 +296,23 @@ describe('statusFromTranscriptEntries', () => {
     assert.equal(statusFromTranscriptEntries(entries, { lastActivityAt: now, now }), STATUS.waiting);
   });
 
+  it('is ended when you interrupted the last turn, until Claude or you continue', () => {
+    const interrupted = [
+      { type: 'user', message: { content: 'hi' } },
+      { type: 'assistant', message: { stop_reason: 'tool_use' } },
+      { type: 'user', timestamp: '2026-11-05T20:00:00.000Z', message: { content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } },
+      { type: 'user', message: { content: '<task-notification>\n<task-type>artifact-auto-react</task-type>' } },
+      { type: 'assistant', isSidechain: true, message: { stop_reason: 'tool_use' } },
+    ];
+    assert.equal(interruptedAtOf(interrupted), Date.parse('2026-11-05T20:00:00.000Z'));
+    assert.equal(statusFromTranscriptEntries(interrupted, { lastActivityAt: now, now }), STATUS.ended);
+    const continued = [...interrupted, { type: 'user', message: { content: 'try again' } }];
+    assert.equal(interruptedAtOf(continued), 0);
+    assert.equal(statusFromTranscriptEntries(continued, { lastActivityAt: now, now }), STATUS.running);
+    const answered = [...interrupted, { type: 'assistant', message: { stop_reason: 'tool_use' } }];
+    assert.equal(interruptedAtOf(answered), 0);
+  });
+
   it('is ended when the file has been quiet for a long time', () => {
     const entries = [{ type: 'user', message: { content: 'hi' } }];
     assert.equal(statusFromTranscriptEntries(entries, { lastActivityAt: 0, now }), STATUS.ended);
@@ -373,6 +410,9 @@ describe('ticketProgressFromEntries', () => {
     assert.equal(inFeedback.stage, 'feedback');
     assert.equal(inFeedback.stageStartedAt, Date.parse(at(59)));
     assert.equal(ticketProgressFromEntries([skill(52, 'taking-evidence')], inFeedback).stage, 'feedback');
+
+    const quotedCommand = { type: 'user', timestamp: at(0), message: { content: 'Commands look like <command-name>/zero-to-shipped</command-name>.' } };
+    assert.equal(ticketProgressFromEntries([quotedCommand, skill(50, 'ship-it')], null), null);
   });
 
   it('starts the build at the first edit after plan approval, or right away for a direct edit', () => {

@@ -18,6 +18,7 @@ import {
 import { readDesktopMetadata } from './desktop-metadata.mjs';
 import {
   hasPendingBackgroundAgents,
+  interruptedAtOf,
   lastEntryTimeOf,
   lastMessageFromTranscriptEntries,
   parseTranscriptLines,
@@ -121,6 +122,7 @@ async function refreshTranscriptMessage(sessionId) {
     applyTranscriptTail(sessionsById, sessionId, {
       lastMessage: lastMessageFromTranscriptEntries(tailEntries),
       lastEntryAt: lastEntryTimeOf(tailEntries),
+      interruptedAt: interruptedAtOf(tailEntries),
       ticket: ticketProgressFromEntries(tailEntries, session.ticket ?? null),
     }),
   );

@@ -12,7 +12,7 @@ Each session gets a light:
 | Green | running | Claude is working |
 | Grey | ended | Nothing to do |
 
-A waiting session shows how long it has waited and, for a permission prompt, what Claude needs, like "Claude needs your permission to use Bash". Other sessions show Claude's latest message, updated while it works. A session stays green while background agents it launched are still working.
+A waiting session shows how long it has waited and, for a permission prompt, what Claude needs, like "Claude needs your permission to use Bash". Other sessions show Claude's latest message, updated while it works. A session stays green while background agents it launched are still working. A session you interrupt turns grey and says "Stopped by you" until you send a new prompt.
 
 A gray line under the title counts your sessions by status, like "1 needs you · 2 running", or says "All quiet". Archived sessions are hidden until you click "Show archived" at the bottom.
 
