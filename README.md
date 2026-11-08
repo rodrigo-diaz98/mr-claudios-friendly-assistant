@@ -40,7 +40,7 @@ A session started with `/zero-to-shipped` shows as a ticket: its key, five stage
 - `server.mjs` runs on `http://127.0.0.1:4317`. It keeps session state, serves the UI from `public/index.html`, exposes `GET /api/state`, and pushes every change to the window over `GET /api/stream`.
 - The server watches `~/.claude/projects` and updates a session's preview as soon as its transcript changes.
 - State is saved to `~/Library/Application Support/Mr Claudio Session Assistant/sessions.json`. After a restart, a saved session is kept unless its transcript got a newer message while the app was down.
-- On startup, `transcript-scan.mjs` reads the last 24 hours of transcripts in `~/.claude/projects` so sessions show up before any hook fires.
+- On startup, `transcript-scan.mjs` reads the transcripts in `~/.claude/projects` so sessions show up before any hook fires. It reads every session the Claude desktop app still lists (not archived, not a scheduled run), plus any other transcript from the last 24 hours.
 - `desktop-metadata.mjs` reads the Claude desktop app's session files for titles, archived state and pull requests.
 - `transcript-scan.mjs` also works out ticket progress and pending background agents from the transcript.
 - `session-state.mjs` holds the status rules. `main.mjs` is the Electron entry point.

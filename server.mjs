@@ -44,7 +44,12 @@ async function readSavedState() {
   }
 }
 
-const scannedSessions = await scanTranscripts({ projectsDir, now: Date.now() });
+const openSessionIds = new Set(
+  [...(await readDesktopMetadata()).entries()]
+    .filter(([, metadata]) => !metadata.isArchived && !metadata.isSideQuestion && !metadata.isScheduledRun)
+    .map(([sessionId]) => sessionId),
+);
+const scannedSessions = await scanTranscripts({ projectsDir, now: Date.now(), openSessionIds });
 const startupSessions = mergeSavedSessions(scannedSessions, await readSavedState());
 let sessionsById = new Map(startupSessions.map((session) => [session.sessionId, session]));
 const transcriptSizeById = new Map();

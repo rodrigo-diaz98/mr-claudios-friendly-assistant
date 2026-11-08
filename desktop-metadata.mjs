@@ -34,6 +34,7 @@ async function readMetadataRoot(metadataRoot, metadataByTranscriptId) {
           title: metadata.title ?? '',
           isArchived: metadata.isArchived === true,
           isSideQuestion: metadata.spawnedFrom?.btw === true,
+          isScheduledRun: Boolean(metadata.scheduledTaskId),
           lastFocusedAt: metadata.lastFocusedAt ?? 0,
           lastTurnEdgeAt: metadata.lastTurnEdgeAt ?? 0,
           pullRequests: (metadata.prs ?? []).map((pullRequest) => ({

@@ -281,18 +281,19 @@ async function listTranscriptFiles(projectsDir) {
   return transcriptPaths;
 }
 
-export async function scanTranscripts({ projectsDir, now }) {
+export async function scanTranscripts({ projectsDir, now, openSessionIds }) {
   const transcriptPaths = await listTranscriptFiles(projectsDir);
   const sessions = [];
   for (const transcriptPath of transcriptPaths) {
+    const sessionId = basename(transcriptPath, '.jsonl');
     const fileStats = await stat(transcriptPath);
-    if (now - fileStats.mtimeMs > SCAN_WINDOW_MS) {
+    if (now - fileStats.mtimeMs > SCAN_WINDOW_MS && !openSessionIds.has(sessionId)) {
       continue;
     }
     const entries = parseTranscriptLines(await readFile(transcriptPath, 'utf8'));
     const cwd = entries.find((entry) => entry.cwd)?.cwd ?? '';
     sessions.push({
-      sessionId: basename(transcriptPath, '.jsonl'),
+      sessionId,
       status: statusFromTranscriptEntries(entries, { lastActivityAt: fileStats.mtimeMs, now }),
       statusChangedAt: fileStats.mtimeMs,
       lastEntryAt: lastEntryTimeOf(entries),
