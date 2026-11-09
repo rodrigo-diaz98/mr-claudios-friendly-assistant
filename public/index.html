@@ -39,11 +39,19 @@
     .open-button { font-size: 12px; color: #eceae4; background: #2c3236; border-radius: 6px; padding: 4px 10px; text-decoration: none; white-space: nowrap; }
     .open-button:hover { background: #3a4147; }
     .empty { color: #96a0a6; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+    .tabs[hidden] { display: none; }
+    .tab { font-size: 12px; color: #96a0a6; background: none; border: 1px solid #2c3236; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+    .tab:hover { color: #eceae4; }
+    .tab.selected { color: #eceae4; background: #2c3236; }
     .archived-toggle { display: block; margin: 10px auto 0; font-size: 11px; color: #96a0a6; background: none; border: 1px solid #2c3236; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
     .archived-toggle:hover { color: #eceae4; }
     li.archived { opacity: 0.55; }
 
     .mascot { width: 72px; height: 72px; overflow: visible; flex-shrink: 0; }
+    .mascots { display: flex; align-items: center; flex-shrink: 0; }
+    .mascots .mascot { position: relative; }
+    .mascots .mascot + .mascot { width: 52px; height: 52px; margin-left: -36px; opacity: 0.6; }
     .mascot .hat, .mascot .hat-night, .mascot .hat-band, .mascot .hat-party { opacity: 0; }
     .mascot.sleeping .hat-night, .mascot.running .hat-band, .mascot.finished .hat-party { opacity: 1; }
     .mascot.waiting .hat { opacity: 1; }
@@ -95,7 +103,7 @@
 </head>
 <body>
   <header>
-    <svg id="mascot" class="mascot sleeping" viewBox="0 -12 80 72">
+    <template id="mascot-template"><svg class="mascot" viewBox="0 -12 80 72">
       <g class="bob">
         <rect class="arm a" x="7" y="22" width="6" height="12"/>
         <rect class="arm b" x="67" y="22" width="6" height="12"/>
@@ -132,24 +140,36 @@
       <path class="check" d="M67 8 L71 12 L78 4"/>
       <circle class="bubble ask" cx="72" cy="8" r="7"/>
       <text class="question" x="69" y="12">?</text>
-    </svg>
+    </svg></template>
+    <div id="mascots" class="mascots"></div>
     <span id="general-light" class="light general-light grey"></span>
     <div>
       <h1>Mr Claudio's Assistant</h1>
       <div id="summary" class="summary"></div>
     </div>
   </header>
+  <div id="tabs" class="tabs" hidden>
+    <button id="desktop-tab" class="tab" type="button"></button>
+    <button id="terminal-tab" class="tab" type="button"></button>
+  </div>
   <ul id="session-list"></ul>
   <button id="archived-toggle" class="archived-toggle" type="button"></button>
   <script>
     const statusLabels = { waiting: 'Needs you', finished: 'Finished', running: 'Running', ended: 'Idle' };
     const lightByStatus = { waiting: 'orange', finished: 'yellow', running: 'green', ended: 'grey' };
     const mascotStateByLight = { grey: 'sleeping', green: 'running', yellow: 'finished', orange: 'waiting' };
+    const sessionStatusByLight = { grey: 'ended', green: 'running', yellow: 'finished', orange: 'waiting' };
+    const MAX_MASCOTS = 5;
     const OVERDUE_AFTER_MS = 10 * 60 * 1000;
-    const TICKET_STAGES = ['design', 'build', 'test', 'ship', 'feedback'];
-    const stageLabels = { design: 'Design', build: 'Build', test: 'Test', ship: 'Ship', feedback: 'Feedback' };
+    const TICKET_STAGES = ['design', 'build', 'review', 'ship', 'feedback'];
+    const stageLabels = { design: 'Design', build: 'Build', review: 'Review', ship: 'Ship', feedback: 'Feedback' };
     let showArchived = false;
+    let selectedTab = 'desktop';
     let latestState = null;
+
+    function isTerminalSession(session) {
+      return Boolean(session.entrypoint) && !session.entrypoint.startsWith('claude-desktop');
+    }
 
     function timeSinceChange(session) {
       const minutes = Math.floor((Date.now() - session.statusChangedAt) / 60_000);
@@ -190,7 +210,11 @@
     function renderStages(session, lightColor) {
       const stages = document.createElement('div');
       stages.className = 'stages';
-      const currentIndex = isMerged(session) ? TICKET_STAGES.length : TICKET_STAGES.indexOf(session.ticket.stage);
+      const currentIndex = isMerged(session)
+        ? TICKET_STAGES.length
+        : session.pullRequests.length > 0
+          ? TICKET_STAGES.indexOf('feedback')
+          : TICKET_STAGES.indexOf(session.ticket.stage);
       TICKET_STAGES.forEach((stageName, index) => {
         const stage = document.createElement('div');
         stage.className = index < currentIndex ? 'stage done' : index === currentIndex ? `stage current ${lightColor}` : 'stage';
@@ -262,17 +286,56 @@
       return row;
     }
 
+    function renderMascots(light, sessions) {
+      const matchingCount = sessions.filter(
+        (session) => !session.isArchived && session.status === sessionStatusByLight[light],
+      ).length;
+      const count = Math.min(MAX_MASCOTS, Math.max(1, matchingCount));
+      const mascotsElement = document.getElementById('mascots');
+      const mascotsKey = `${light}:${count}`;
+      if (mascotsElement.dataset.key === mascotsKey) {
+        return;
+      }
+      mascotsElement.dataset.key = mascotsKey;
+      const template = document.getElementById('mascot-template');
+      const mascots = Array.from({ length: count }, (_, index) => {
+        const mascot = template.content.firstElementChild.cloneNode(true);
+        mascot.setAttribute('class', `mascot ${mascotStateByLight[light]}`);
+        mascot.style.zIndex = count - index;
+        return mascot;
+      });
+      mascotsElement.replaceChildren(...mascots);
+    }
+
     function render() {
-      document.getElementById('mascot').setAttribute('class', `mascot ${mascotStateByLight[latestState.light]}`);
+      renderMascots(latestState.light, latestState.sessions);
       document.getElementById('general-light').setAttribute('class', `light general-light ${latestState.light}`);
       document.getElementById('summary').textContent = summaryText(latestState.sessions.filter((session) => !session.isArchived));
 
-      const archivedCount = latestState.sessions.filter((session) => session.isArchived).length;
+      const sessionsByTab = { desktop: [], terminal: [] };
+      for (const session of latestState.sessions) {
+        sessionsByTab[isTerminalSession(session) ? 'terminal' : 'desktop'].push(session);
+      }
+      const hasActiveTerminalSession = sessionsByTab.terminal.some(
+        (session) => !session.isArchived && session.status !== 'ended',
+      );
+      if (!hasActiveTerminalSession) {
+        selectedTab = 'desktop';
+      }
+      const countNotArchived = (sessions) => sessions.filter((session) => !session.isArchived).length;
+      document.getElementById('tabs').hidden = !hasActiveTerminalSession;
+      document.getElementById('desktop-tab').textContent = `Desktop (${countNotArchived(sessionsByTab.desktop)})`;
+      document.getElementById('terminal-tab').textContent = `Terminal (${countNotArchived(sessionsByTab.terminal)})`;
+      document.getElementById('desktop-tab').classList.toggle('selected', selectedTab === 'desktop');
+      document.getElementById('terminal-tab').classList.toggle('selected', selectedTab === 'terminal');
+
+      const tabSessions = sessionsByTab[selectedTab];
+      const archivedCount = tabSessions.filter((session) => session.isArchived).length;
       document.getElementById('archived-toggle').textContent = showArchived
         ? 'Hide archived'
         : `Show archived (${archivedCount})`;
 
-      const visibleSessions = latestState.sessions.filter((session) => showArchived || !session.isArchived);
+      const visibleSessions = tabSessions.filter((session) => showArchived || !session.isArchived);
       const sessionList = document.getElementById('session-list');
       sessionList.replaceChildren();
       if (visibleSessions.length === 0) {
@@ -285,6 +348,16 @@
         sessionList.append(renderSessionRow(session));
       }
     }
+
+    document.getElementById('desktop-tab').addEventListener('click', () => {
+      selectedTab = 'desktop';
+      render();
+    });
+
+    document.getElementById('terminal-tab').addEventListener('click', () => {
+      selectedTab = 'terminal';
+      render();
+    });
 
     document.getElementById('archived-toggle').addEventListener('click', () => {
       showArchived = !showArchived;

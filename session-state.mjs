@@ -21,7 +21,7 @@ const LIGHT_BY_STATUS = Object.freeze({
   ended: 'grey',
 });
 
-export const FINISHED_VISIBLE_MS = 45_000;
+export const FINISHED_VISIBLE_MS = 5 * 60 * 1000;
 
 const PERMISSION_NOTIFICATION_TYPES = new Set(['permission_prompt', 'elicitation_dialog']);
 
@@ -30,7 +30,10 @@ export function endsWithQuestion(text) {
 }
 
 export function statusFromHookEvent(eventName, payload) {
-  if (eventName === 'SessionStart' || eventName === 'UserPromptSubmit') {
+  if (eventName === 'SessionStart') {
+    return payload.source === 'compact' ? null : STATUS.running;
+  }
+  if (eventName === 'UserPromptSubmit') {
     return STATUS.running;
   }
   if (eventName === 'Stop') {
@@ -60,6 +63,9 @@ export function applyHookEvent(sessionsById, { eventName, payload, now }) {
   const previousSession = sessionsById.get(sessionId);
   const statusChanged = previousSession?.status !== nextStatus;
   const updatedSession = {
+    ticket: null,
+    entrypoint: '',
+    ...previousSession,
     sessionId,
     status: nextStatus,
     statusChangedAt: statusChanged ? now : previousSession.statusChangedAt,
@@ -70,7 +76,7 @@ export function applyHookEvent(sessionsById, { eventName, payload, now }) {
       ? payload.last_assistant_message.replace(/\s+/g, ' ').trim().slice(0, 140)
       : previousSession?.lastMessage ?? '',
     waitingReason: eventName === 'Notification' ? payload.message ?? '' : '',
-    ticket: previousSession?.ticket ?? null,
+    interrupted: undefined,
   };
 
   const nextSessionsById = new Map(sessionsById);
@@ -79,10 +85,13 @@ export function applyHookEvent(sessionsById, { eventName, payload, now }) {
   return { sessionsById: nextSessionsById };
 }
 
-function statusChangeFromTail(session, { lastEntryAt, interruptedAt }) {
+function statusChangeFromTail(session, { lastEntryAt, interruptedAt, asksQuestion }) {
   const isActive = session.status === STATUS.running || session.status === STATUS.waiting;
   if (isActive && interruptedAt > session.statusChangedAt) {
     return { status: STATUS.ended, statusChangedAt: interruptedAt, waitingReason: '', interrupted: true };
+  }
+  if (asksQuestion && session.status !== STATUS.waiting) {
+    return { status: STATUS.waiting, statusChangedAt: lastEntryAt, waitingReason: '' };
   }
   if (session.status === STATUS.waiting && Boolean(session.waitingReason) && lastEntryAt > session.statusChangedAt) {
     return { status: STATUS.running, statusChangedAt: lastEntryAt, waitingReason: '' };
@@ -90,20 +99,29 @@ function statusChangeFromTail(session, { lastEntryAt, interruptedAt }) {
   return null;
 }
 
-export function applyTranscriptTail(sessionsById, sessionId, { lastMessage, lastEntryAt, ticket, interruptedAt = 0 }) {
+export function applyTranscriptTail(
+  sessionsById,
+  sessionId,
+  { lastMessage, lastEntryAt, ticket, entrypoint = '', interruptedAt = 0, asksQuestion = false },
+) {
   const session = sessionsById.get(sessionId);
   if (!session) {
     return sessionsById;
   }
-  const nextLastMessage = lastMessage || session.lastMessage;
-  const nextTicket = ticket ?? session.ticket ?? null;
-  const ticketChanged = JSON.stringify(nextTicket) !== JSON.stringify(session.ticket ?? null);
-  const statusChange = statusChangeFromTail(session, { lastEntryAt, interruptedAt });
-  if (!statusChange && !ticketChanged && nextLastMessage === session.lastMessage) {
+  const updatedFields = {
+    lastMessage: lastMessage || session.lastMessage,
+    ticket: ticket ?? session.ticket ?? null,
+    entrypoint: entrypoint || session.entrypoint || '',
+    ...statusChangeFromTail(session, { lastEntryAt, interruptedAt, asksQuestion }),
+  };
+  const hasChanges = Object.entries(updatedFields).some(
+    ([field, value]) => JSON.stringify(value) !== JSON.stringify(session[field]),
+  );
+  if (!hasChanges) {
     return sessionsById;
   }
   const nextSessionsById = new Map(sessionsById);
-  nextSessionsById.set(sessionId, { ...session, lastMessage: nextLastMessage, ticket: nextTicket, ...statusChange });
+  nextSessionsById.set(sessionId, { ...session, ...updatedFields });
   return nextSessionsById;
 }
 
@@ -114,8 +132,12 @@ export function mergeSavedSessions(scannedSessions, savedState) {
   const savedSessionsById = new Map(savedState.sessions.map((session) => [session.sessionId, session]));
   return scannedSessions.map((scannedSession) => {
     const savedSession = savedSessionsById.get(scannedSession.sessionId);
-    return savedSession && savedState.savedAt >= scannedSession.lastEntryAt
-      ? { ...savedSession, ticket: scannedSession.ticket }
+    const savedStateIsCurrent = savedSession && savedState.savedAt >= scannedSession.lastEntryAt;
+    const savedRunningWasSuperseded =
+      savedSession?.status === STATUS.running && scannedSession.status !== STATUS.running;
+    const scanFoundPendingQuestion = scannedSession.status === STATUS.waiting && savedSession?.status !== STATUS.waiting;
+    return savedStateIsCurrent && !savedRunningWasSuperseded && !scanFoundPendingQuestion
+      ? { ...savedSession, ticket: scannedSession.ticket, entrypoint: scannedSession.entrypoint }
       : scannedSession;
   });
 }

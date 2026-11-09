@@ -17,6 +17,7 @@ import {
 } from './session-state.mjs';
 import { readDesktopMetadata } from './desktop-metadata.mjs';
 import {
+  entrypointOfEntries,
   hasPendingBackgroundAgents,
   interruptedAtOf,
   lastEntryTimeOf,
@@ -127,7 +128,9 @@ async function refreshTranscriptMessage(sessionId) {
     applyTranscriptTail(sessionsById, sessionId, {
       lastMessage: lastMessageFromTranscriptEntries(tailEntries),
       lastEntryAt: lastEntryTimeOf(tailEntries),
+      entrypoint: entrypointOfEntries(tailEntries),
       interruptedAt: interruptedAtOf(tailEntries),
+      asksQuestion: transcriptAsksQuestion(tailEntries),
       ticket: ticketProgressFromEntries(tailEntries, session.ticket ?? null),
     }),
   );

@@ -13,6 +13,7 @@ import {
   STATUS,
 } from './session-state.mjs';
 import {
+  entrypointOfEntries,
   hasPendingBackgroundAgents,
   interruptedAtOf,
   lastEntryTimeOf,
@@ -28,6 +29,28 @@ function eventFor(eventName, extraPayload = {}, now = 1000) {
 }
 
 describe('applyHookEvent', () => {
+  it('keeps the entrypoint the transcript gave the session through later hook events', () => {
+    const withEntrypoint = applyTranscriptTail(
+      applyHookEvent(new Map(), eventFor('SessionStart', {}, 1000)).sessionsById,
+      SESSION_ID,
+      { lastMessage: '', lastEntryAt: 1000, entrypoint: 'cli' },
+    );
+    const afterPrompt = applyHookEvent(withEntrypoint, eventFor('UserPromptSubmit', {}, 2000)).sessionsById;
+    assert.equal(afterPrompt.get(SESSION_ID).entrypoint, 'cli');
+    const withExtraField = new Map([[SESSION_ID, { ...afterPrompt.get(SESSION_ID), pullRequests: [] }]]);
+    const afterStop = applyHookEvent(withExtraField, eventFor('Stop', {}, 3000)).sessionsById;
+    assert.deepEqual(afterStop.get(SESSION_ID).pullRequests, []);
+  });
+
+  it('keeps the current status when the session is compacted', () => {
+    const finished = applyHookEvent(new Map(), eventFor('Stop', {}, 1000)).sessionsById;
+    const afterCompact = applyHookEvent(finished, eventFor('SessionStart', { source: 'compact' }, 2000)).sessionsById;
+    assert.equal(afterCompact.get(SESSION_ID).status, STATUS.finished);
+    assert.equal(afterCompact.get(SESSION_ID).statusChangedAt, 1000);
+    const afterStartup = applyHookEvent(finished, eventFor('SessionStart', { source: 'startup' }, 2000)).sessionsById;
+    assert.equal(afterStartup.get(SESSION_ID).status, STATUS.running);
+  });
+
   it('marks a session finished on Stop, unless its background agents are still working', () => {
     const result = applyHookEvent(new Map(), eventFor('Stop'));
     assert.equal(result.sessionsById.get(SESSION_ID).status, STATUS.finished);
@@ -96,7 +119,8 @@ describe('applyTranscriptTail', () => {
     const afterStop = applyHookEvent(new Map(), eventFor('Stop', { last_assistant_message: 'Old reply.' }, 1000));
     const afterPrompt = applyHookEvent(afterStop.sessionsById, eventFor('UserPromptSubmit', {}, 2000));
     const ticket = { key: 'ABC-123', stage: 'build', stageStartedAt: 2400, designMode: 'superpowers' };
-    const midTurn = applyTranscriptTail(afterPrompt.sessionsById, SESSION_ID, { lastMessage: 'Committing PR 1 now.', lastEntryAt: 2500, ticket });
+    const midTurn = applyTranscriptTail(afterPrompt.sessionsById, SESSION_ID, { lastMessage: 'Committing PR 1 now.', lastEntryAt: 2500, ticket, entrypoint: 'cli' });
+    assert.equal(midTurn.get(SESSION_ID).entrypoint, 'cli');
     assert.equal(midTurn.get(SESSION_ID).lastMessage, 'Committing PR 1 now.');
     assert.equal(midTurn.get(SESSION_ID).status, STATUS.running);
     assert.deepEqual(midTurn.get(SESSION_ID).ticket, ticket);
@@ -119,6 +143,14 @@ describe('applyTranscriptTail', () => {
     const waitingOnQuestion = applyHookEvent(new Map(), eventFor('Stop', { last_assistant_message: 'Ship it?' }, 5000)).sessionsById;
     const afterQuestion = applyTranscriptTail(waitingOnQuestion, SESSION_ID, { lastMessage: 'Ship it?', lastEntryAt: 6000 });
     assert.equal(afterQuestion.get(SESSION_ID).status, STATUS.waiting);
+  });
+
+  it('turns a session waiting when its transcript ends with a question box', () => {
+    const finished = applyHookEvent(new Map(), eventFor('Stop', {}, 5000)).sessionsById;
+    const asking = applyTranscriptTail(finished, SESSION_ID, { lastMessage: 'Done.', lastEntryAt: 6000, asksQuestion: true });
+    assert.equal(asking.get(SESSION_ID).status, STATUS.waiting);
+    assert.equal(asking.get(SESSION_ID).statusChangedAt, 6000);
+    assert.equal(applyTranscriptTail(asking, SESSION_ID, { lastMessage: 'Done.', lastEntryAt: 7000, asksQuestion: true }), asking);
   });
 
   it('turns a running or permission-waiting session idle when you interrupt it, until your next prompt', () => {
@@ -147,6 +179,8 @@ describe('mergeSavedSessions', () => {
       { sessionId: 'quiet', status: STATUS.ended, lastEntryAt: 1000, ticket: { key: 'ABC-1', stage: 'ship' } },
       { sessionId: 'moved-on', status: STATUS.finished, lastEntryAt: 3000 },
       { sessionId: 'new', status: STATUS.running, lastEntryAt: 3000 },
+      { sessionId: 'stuck-running', status: STATUS.finished, lastEntryAt: 1000 },
+      { sessionId: 'asking', status: STATUS.waiting, lastEntryAt: 1000 },
     ];
     const savedState = {
       savedAt: 2000,
@@ -154,12 +188,20 @@ describe('mergeSavedSessions', () => {
         { sessionId: 'quiet', status: STATUS.waiting, waitingReason: 'Claude needs your permission to use Bash' },
         { sessionId: 'moved-on', status: STATUS.waiting },
         { sessionId: 'gone', status: STATUS.waiting },
+        { sessionId: 'stuck-running', status: STATUS.running },
+        { sessionId: 'asking', status: STATUS.ended },
       ],
     };
     const merged = mergeSavedSessions(scannedSessions, savedState);
     assert.deepEqual(
       merged.map((session) => [session.sessionId, session.status]),
-      [['quiet', STATUS.waiting], ['moved-on', STATUS.finished], ['new', STATUS.running]],
+      [
+        ['quiet', STATUS.waiting],
+        ['moved-on', STATUS.finished],
+        ['new', STATUS.running],
+        ['stuck-running', STATUS.finished],
+        ['asking', STATUS.waiting],
+      ],
     );
     assert.equal(merged[0].waitingReason, 'Claude needs your permission to use Bash');
     assert.deepEqual(merged[0].ticket, { key: 'ABC-1', stage: 'ship' });
@@ -366,6 +408,16 @@ describe('statusFromTranscriptEntries', () => {
     assert.equal(hasPendingBackgroundAgents(finalReport), false);
   });
 
+  it('takes the entrypoint from the latest entry that names one', () => {
+    const movedToDesktop = [
+      { type: 'user', entrypoint: 'cli', message: { content: 'hi' } },
+      { type: 'assistant', entrypoint: 'claude-desktop', message: { stop_reason: 'end_turn' } },
+      { type: 'frame-link' },
+    ];
+    assert.equal(entrypointOfEntries(movedToDesktop), 'claude-desktop');
+    assert.equal(entrypointOfEntries([{ type: 'frame-link' }]), '');
+  });
+
   it('times the last message, ignoring later bookkeeping entries', () => {
     const entries = [
       { type: 'user', timestamp: '2026-11-05T20:00:00.000Z', message: { content: 'hi' } },
@@ -408,11 +460,15 @@ describe('ticketProgressFromEntries', () => {
     assert.equal(building.stageStartedAt, Date.parse(at(50)));
 
     const autoFixEvent = { type: 'user', timestamp: at(59), message: { content: '<ci-monitor-event>"Auto-fix pull requests" is watching PR #412' } };
-    const later = [skill(52, 'taking-evidence'), skill(55, 'ship-it'), autoFixEvent];
-    const inFeedback = ticketProgressFromEntries(later, building);
+    assert.equal(ticketProgressFromEntries([skill(51, 'some-other-skill')], building).stage, 'build');
+    const reviewing = ticketProgressFromEntries([command(52, 'simplify')], building);
+    assert.equal(reviewing.stage, 'review');
+    const shipping = ticketProgressFromEntries([skill(55, 'open-nice-pr')], reviewing);
+    assert.equal(shipping.stage, 'ship');
+    const inFeedback = ticketProgressFromEntries([autoFixEvent], shipping);
     assert.equal(inFeedback.stage, 'feedback');
     assert.equal(inFeedback.stageStartedAt, Date.parse(at(59)));
-    assert.equal(ticketProgressFromEntries([skill(52, 'taking-evidence')], inFeedback).stage, 'feedback');
+    assert.equal(ticketProgressFromEntries([skill(52, 'code-review')], inFeedback).stage, 'feedback');
 
     const quotedCommand = { type: 'user', timestamp: at(0), message: { content: 'Commands look like <command-name>/zero-to-shipped</command-name>.' } };
     assert.equal(ticketProgressFromEntries([quotedCommand, skill(50, 'ship-it')], null), null);

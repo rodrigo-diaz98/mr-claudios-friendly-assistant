@@ -8,13 +8,15 @@ Each session gets a light:
 | --- | --- | --- |
 | Red | waiting | Claude has been waiting for you for more than 10 minutes |
 | Orange | waiting | Claude asked a question or needs a permission |
-| Yellow | finished | Claude finished a turn you haven't looked at yet |
+| Yellow | finished | Claude finished a turn you haven't looked at yet (for up to 5 minutes) |
 | Green | running | Claude is working |
 | Grey | ended | Nothing to do |
 
-A waiting session shows how long it has waited and, for a permission prompt, what Claude needs, like "Claude needs your permission to use Bash". Other sessions show Claude's latest message, updated while it works. A session stays green while background agents it launched are still working. A session you interrupt turns grey and says "Stopped by you" until you send a new prompt.
+A waiting session shows how long it has waited and, for a permission prompt, what Claude needs, like "Claude needs your permission to use Bash". Other sessions show Claude's latest message, updated while it works. A session stays green while background agents it launched are still working. A session you interrupt turns grey and says "Stopped by you" until you send a new prompt. Compacting a session keeps its light as it was.
 
-A gray line under the title counts your sessions by status, like "1 needs you · 2 running", or says "All quiet". Archived sessions are hidden until you click "Show archived" at the bottom. `/btw` side questions are always hidden, because they show inside the session you asked them from.
+The header shows one Claudio for each session behind the overall light, up to 5, so two sessions waiting on you show two orange Claudios. A gray line under the title counts your sessions by status, like "1 needs you · 2 running", or says "All quiet". Archived sessions are hidden until you click "Show archived" at the bottom. A session counts as archived if any of the desktop app's session files says so. `/btw` side questions are always hidden, because they show inside the session you asked them from.
+
+While a session started with `claude` in a terminal is active, Desktop and Terminal tabs appear above the list. A session goes under the tab of the app it was last used from.
 
 The window sits in the bottom-right corner and pops up (without taking focus) when a session turns orange or yellow.
 
@@ -24,15 +26,16 @@ A session started with `/zero-to-shipped` shows as a ticket: its key, five stage
 
 | Stage | Starts when the session |
 | --- | --- |
-| Design | runs `/zero-to-shipped` (setup, ticket, brainstorming or plan mode) |
-| Build | runs `superpowers:executing-plans` or `superpowers:subagent-driven-development`, or edits code outside brainstorming and plan mode |
-| Test | runs `taking-evidence` |
-| Ship | runs `ship-it` |
-| Feedback | runs `review-pr-comments`, or gets its first Auto-fix event |
+| Design | runs `/zero-to-shipped` (setup, ticket, `grill-me`, brainstorming, writing plans or plan mode) |
+| Build | runs `superpowers:executing-plans` or `superpowers:subagent-driven-development`, or edits code outside the design skills and plan mode |
+| Review | runs `simplify`, `look-for-bugs` or `code-review` |
+| Ship | runs `open-nice-pr` or `ship-it` |
+| Feedback | runs `review-pr-comments`, gets its first Auto-fix event, or has a pull request |
 
+- The skill names for each stage live in `stage-skills.mjs`. On a machine with other skills, add their names to the right stage there and change nothing else. Keep the five stage keys, since the window shows those five bars.
 - Stages only move forward. Finished stages are dark green, and the current one takes the session's light color.
 - The ticket key comes from the git branch (`dev/abc-123-search` becomes `ABC-123`), falling back to the `/zero-to-shipped` arguments, `initialize-worktree` or `getJiraIssue`.
-- PR numbers and the Auto-fix tag come from the Claude desktop app's session file. When every PR is merged, all bars fill and the ticket shows "Merged".
+- PR numbers and the Auto-fix tag come from the Claude desktop app's session file. Once a ticket has a pull request, Ship is done and Feedback is current, with or without Auto-fix. When every PR is merged, all bars fill and the ticket shows "Merged".
 
 ## How it works
 

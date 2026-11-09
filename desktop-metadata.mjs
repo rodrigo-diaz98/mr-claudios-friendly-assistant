@@ -30,9 +30,10 @@ async function readMetadataRoot(metadataRoot, metadataByTranscriptId) {
         if (!metadata?.cliSessionId) {
           continue;
         }
+        const existingMetadata = metadataByTranscriptId.get(metadata.cliSessionId);
         metadataByTranscriptId.set(metadata.cliSessionId, {
           title: metadata.title ?? '',
-          isArchived: metadata.isArchived === true,
+          isArchived: metadata.isArchived === true || existingMetadata?.isArchived === true,
           isSideQuestion: metadata.spawnedFrom?.btw === true,
           isScheduledRun: Boolean(metadata.scheduledTaskId),
           lastFocusedAt: metadata.lastFocusedAt ?? 0,

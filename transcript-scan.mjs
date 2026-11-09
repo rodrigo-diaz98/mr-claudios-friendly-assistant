@@ -1,6 +1,7 @@
 import { open, readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { endsWithQuestion, STATUS, nameFromCwd } from './session-state.mjs';
+import { stageOfSkill, TICKET_ENTRY_SKILL, TICKET_STAGES } from './stage-skills.mjs';
 
 const SCAN_WINDOW_MS = 24 * 60 * 60 * 1000;
 const QUIET_AFTER_MS = 10 * 60 * 1000;
@@ -10,15 +11,6 @@ const LAST_MESSAGE_MAX_LENGTH = 140;
 const TAIL_BYTES = 512 * 1024;
 const TASK_NOTIFICATION_ID_PATTERN = /<task-notification>[\s\S]*?<task-id>([^<]+)<\/task-id>/;
 const INTERIM_REPORT_PATTERN = /<summary>[^<]*waiting on its own background work<\/summary>/;
-const TICKET_STAGES = ['design', 'build', 'test', 'ship', 'feedback'];
-const STAGE_BY_SKILL = new Map([
-  ['superpowers:executing-plans', 'build'],
-  ['superpowers:subagent-driven-development', 'build'],
-  ['taking-evidence', 'test'],
-  ['ship-it', 'ship'],
-  ['review-pr-comments', 'feedback'],
-]);
-const DESIGN_SKILLS = new Set(['superpowers:brainstorming', 'superpowers:writing-plans']);
 const EDIT_TOOL_NAMES = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 const INTERRUPT_MARKER = '[Request interrupted by user';
 const COMMAND_NAME_PATTERN = /^(?:<command-message>[^<]*<\/command-message>\s*)?<command-name>\/?([^<]+)<\/command-name>/;
@@ -101,7 +93,7 @@ export function ticketProgressFromEntries(entries, previousProgress) {
     const toolUses = toolUsesOf(entry);
     const skillNames = [commandNameOf(entry), ...toolUses.filter((toolUse) => toolUse.name === 'Skill').map((toolUse) => toolUse.input?.skill)];
     if (!progress) {
-      if (skillNames.includes('zero-to-shipped')) {
+      if (skillNames.includes(TICKET_ENTRY_SKILL)) {
         const args = typeof entry.message?.content === 'string' ? entry.message.content : toolUses.map((toolUse) => toolUse.input?.args).join(' ');
         progress = { key: ticketKeyIn(args), stage: 'design', stageStartedAt: at, designMode: 'direct' };
       }
@@ -113,10 +105,13 @@ export function ticketProgressFromEntries(entries, previousProgress) {
       progress = { ...progress, key: branchKey };
     }
     for (const skillName of skillNames) {
-      if (DESIGN_SKILLS.has(skillName)) {
-        progress = { ...progress, designMode: 'superpowers' };
-      } else if (STAGE_BY_SKILL.has(skillName)) {
-        progress = advanceStage(progress, STAGE_BY_SKILL.get(skillName), at);
+      const stage = stageOfSkill(skillName);
+      if (stage === 'design') {
+        if (skillName !== TICKET_ENTRY_SKILL) {
+          progress = { ...progress, designMode: 'superpowers' };
+        }
+      } else if (stage) {
+        progress = advanceStage(progress, stage, at);
       }
     }
     for (const toolUse of toolUses) {
@@ -137,6 +132,10 @@ export function ticketProgressFromEntries(entries, previousProgress) {
     }
   }
   return progress;
+}
+
+export function entrypointOfEntries(entries) {
+  return entries.findLast((entry) => entry.entrypoint)?.entrypoint ?? '';
 }
 
 export function lastEntryTimeOf(entries) {
@@ -298,6 +297,7 @@ export async function scanTranscripts({ projectsDir, now, openSessionIds }) {
       statusChangedAt: fileStats.mtimeMs,
       lastEntryAt: lastEntryTimeOf(entries),
       interrupted: interruptedAtOf(entries) > 0,
+      entrypoint: entrypointOfEntries(entries),
       cwd,
       transcriptPath,
       name: nameFromTranscriptEntries(entries, cwd),
