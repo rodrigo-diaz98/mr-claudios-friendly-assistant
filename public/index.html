@@ -61,7 +61,10 @@
     .collapse-button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
     body.collapsed .collapse-button svg { transform: rotate(180deg); }
     body.collapsed { overflow: hidden; }
-    .hero { transition: border-color 0.4s, background 0.4s, margin-bottom 0.25s; }
+    .hero { transition: border-color 0.4s, background 0.4s, margin-bottom 0.25s, --c 0.6s ease; }
+    @media (prefers-reduced-motion: reduce) {
+      .hero, li.session, li.session::before, li.session::after, .light, .chip, .stage, .stage-bar { transition: none; }
+    }
     body.collapsed .hero { margin-bottom: 0; }
     .content { transition: opacity 0.2s ease-out, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
     body.collapsed .content { opacity: 0; transform: translateY(-10px) scale(0.98); pointer-events: none; }
@@ -78,6 +81,7 @@
       border-radius: 999px;
       color: color-mix(in srgb, var(--c) 70%, white);
       background: color-mix(in srgb, var(--c) 16%, transparent);
+      transition: --c 0.6s ease;
     }
     .chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
 
@@ -100,12 +104,16 @@
       background: var(--surface);
       border: 1px solid var(--border);
       overflow: hidden;
-      transition: background 0.15s, border-color 0.15s;
+      isolation: isolate;
+      transition: background 0.15s, border-color 0.15s, --c 0.6s ease;
     }
     li.session:hover { background: var(--surface-hover); border-color: color-mix(in srgb, var(--c) 30%, var(--border)); }
-    li.session.attention { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 9%, var(--surface)), var(--surface) 55%); }
-    li.session.attention::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c); }
+    li.session::before, li.session::after { content: ''; position: absolute; opacity: 0; pointer-events: none; transition: opacity 0.6s ease; }
+    li.session::before { left: 0; top: 0; bottom: 0; width: 3px; background: var(--c); }
+    li.session::after { inset: 0; z-index: -1; background: linear-gradient(90deg, color-mix(in srgb, var(--c) 9%, transparent), transparent 55%); }
+    li.session.attention::before, li.session.attention::after { opacity: 1; }
     li.session.archived { opacity: 0.5; }
+    li.session { transition: background 0.15s, border-color 0.15s, --c 0.6s ease, opacity 0.4s ease; }
     li.session { cursor: pointer; }
     li.session.selected { border-color: color-mix(in srgb, var(--c) 70%, var(--border)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 50%, transparent); }
 
@@ -121,7 +129,8 @@
 
     .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin: 8px 0 2px; }
     .stage { font-size: 8.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-muted); text-align: center; }
-    .stage-bar { height: 5px; border-radius: 3px; background: var(--border); margin-bottom: 4px; }
+    .stage { transition: color 0.6s ease, --c 0.6s ease; }
+    .stage-bar { height: 5px; border-radius: 3px; background: var(--border); margin-bottom: 4px; transition: background-color 0.6s ease, box-shadow 0.6s ease; }
     .stage.done { color: var(--text-soft); }
     .stage.done .stage-bar { background: #2f6f3e; }
     .stage.current { color: var(--text); }
@@ -523,10 +532,17 @@
       const count = Math.min(MAX_MASCOTS, Math.max(1, matchingCount));
       const mascotsElement = document.getElementById('mascots');
       const mascotsKey = `${light}:${count}`;
-      if (mascotsElement.dataset.key === mascotsKey) {
+      const previousKey = mascotsElement.dataset.key;
+      if (previousKey === mascotsKey) {
         return;
       }
       mascotsElement.dataset.key = mascotsKey;
+      if (previousKey && !reducedMotion.matches) {
+        mascotsElement.animate(
+          [{ opacity: 0.2, transform: 'scale(0.9)' }, { opacity: 1, transform: 'none' }],
+          { duration: 380, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+        );
+      }
       const template = document.getElementById('mascot-template');
       const mascots = Array.from({ length: count }, (_, index) => {
         const mascot = template.content.firstElementChild.cloneNode(true);
@@ -540,9 +556,11 @@
     function render() {
       renderMascots(latestState.light, latestState.sessions);
       document.getElementById('hero').className = `hero ${latestState.light}`;
-      document.getElementById('summary').replaceChildren(
-        ...summaryChips(latestState.sessions.filter((session) => !session.isArchived)),
-      );
+      const freshSummary = document.createElement('div');
+      freshSummary.id = 'summary';
+      freshSummary.className = 'summary';
+      freshSummary.append(...summaryChips(latestState.sessions.filter((session) => !session.isArchived)));
+      morph(document.getElementById('summary'), freshSummary);
 
       const sessionsByTab = { desktop: [], terminal: [] };
       for (const session of latestState.sessions) {

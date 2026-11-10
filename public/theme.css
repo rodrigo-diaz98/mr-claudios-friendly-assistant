@@ -9,6 +9,11 @@
   --claude: #d97757;
   --mono: ui-monospace, 'SF Mono', Menlo, monospace;
 }
+@property --c {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #6e7781;
+}
 .green { --c: #3fb950; }
 .yellow { --c: #d9b84d; }
 .orange { --c: #e8833a; }
@@ -20,7 +25,7 @@
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-.light { position: relative; width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
+.light { position: relative; width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex-shrink: 0; transition: --c 0.6s ease; }
 .light.green::after, .light.orange::after, .light.red::after {
   content: '';
   position: absolute;
