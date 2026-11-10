@@ -30,9 +30,6 @@ export function endsWithQuestion(text) {
 }
 
 export function statusFromHookEvent(eventName, payload) {
-  if (eventName === 'SessionStart') {
-    return payload.source === 'compact' || payload.source === 'resume' ? null : STATUS.running;
-  }
   if (eventName === 'UserPromptSubmit') {
     return STATUS.running;
   }
@@ -53,14 +50,32 @@ export function statusFromHookEvent(eventName, payload) {
   return null;
 }
 
+export function previewText(text) {
+  return text.replace(/\s+/g, ' ').trim().slice(0, 140);
+}
+
+export function promptPreview(prompt) {
+  return previewText(`You: ${prompt}`);
+}
+
+function lastMessageFromHookEvent(eventName, payload, previousSession) {
+  if (eventName === 'UserPromptSubmit' && payload.prompt) {
+    return promptPreview(payload.prompt);
+  }
+  if (payload.last_assistant_message) {
+    return previewText(payload.last_assistant_message);
+  }
+  return previousSession?.lastMessage ?? '';
+}
+
 export function applyHookEvent(sessionsById, { eventName, payload, now }) {
   const sessionId = payload.session_id;
   const nextStatus = statusFromHookEvent(eventName, payload);
-  if (!sessionId || !nextStatus) {
+  const previousSession = sessionsById.get(sessionId);
+  if (!sessionId || !nextStatus || (!previousSession && eventName === 'SessionEnd')) {
     return { sessionsById };
   }
 
-  const previousSession = sessionsById.get(sessionId);
   const statusChanged = previousSession?.status !== nextStatus;
   const updatedSession = {
     ticket: null,
@@ -72,9 +87,7 @@ export function applyHookEvent(sessionsById, { eventName, payload, now }) {
     cwd: payload.cwd ?? previousSession?.cwd ?? '',
     transcriptPath: payload.transcript_path ?? previousSession?.transcriptPath ?? '',
     name: previousSession?.name ?? nameFromCwd(payload.cwd),
-    lastMessage: payload.last_assistant_message
-      ? payload.last_assistant_message.replace(/\s+/g, ' ').trim().slice(0, 140)
-      : previousSession?.lastMessage ?? '',
+    lastMessage: lastMessageFromHookEvent(eventName, payload, previousSession),
     waitingReason: eventName === 'Notification' ? payload.message ?? '' : '',
     interrupted: undefined,
   };

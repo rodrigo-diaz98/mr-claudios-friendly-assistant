@@ -17,6 +17,7 @@ import {
   hasPendingBackgroundAgents,
   interruptedAtOf,
   lastEntryTimeOf,
+  lastMessageFromTranscriptEntries,
   statusFromTranscriptEntries,
   ticketProgressFromEntries,
 } from './transcript-scan.mjs';
@@ -32,7 +33,7 @@ function eventFor(eventName, extraPayload = {}, now = 1000) {
 describe('applyHookEvent', () => {
   it('keeps the entrypoint the transcript gave the session through later hook events', () => {
     const withEntrypoint = applyTranscriptTail(
-      applyHookEvent(new Map(), eventFor('SessionStart', {}, 1000)).sessionsById,
+      applyHookEvent(new Map(), eventFor('UserPromptSubmit', {}, 1000)).sessionsById,
       SESSION_ID,
       { lastMessage: '', lastEntryAt: 1000, entrypoint: 'cli' },
     );
@@ -43,7 +44,7 @@ describe('applyHookEvent', () => {
     assert.deepEqual(afterStop.get(SESSION_ID).pullRequests, []);
   });
 
-  it('keeps the current status when the session is compacted or resumed', () => {
+  it('keeps the current status when the session starts, resumes or is compacted', () => {
     const finished = applyHookEvent(new Map(), eventFor('Stop', {}, 1000)).sessionsById;
     const afterCompact = applyHookEvent(finished, eventFor('SessionStart', { source: 'compact' }, 2000)).sessionsById;
     assert.equal(afterCompact.get(SESSION_ID).status, STATUS.finished);
@@ -52,7 +53,17 @@ describe('applyHookEvent', () => {
     assert.equal(afterResume.get(SESSION_ID).status, STATUS.finished);
     assert.equal(afterResume.get(SESSION_ID).statusChangedAt, 1000);
     const afterStartup = applyHookEvent(finished, eventFor('SessionStart', { source: 'startup' }, 2000)).sessionsById;
-    assert.equal(afterStartup.get(SESSION_ID).status, STATUS.running);
+    assert.equal(afterStartup.get(SESSION_ID).status, STATUS.finished);
+  });
+
+  it('never shows a new session that ended before its first prompt', () => {
+    const started = applyHookEvent(new Map(), eventFor('SessionStart', { source: 'startup' }, 1000)).sessionsById;
+    assert.equal(started.has(SESSION_ID), false);
+    const ended = applyHookEvent(started, eventFor('SessionEnd', {}, 2000)).sessionsById;
+    assert.equal(ended.has(SESSION_ID), false);
+    const prompted = applyHookEvent(started, eventFor('UserPromptSubmit', {}, 2000)).sessionsById;
+    assert.equal(prompted.get(SESSION_ID).status, STATUS.running);
+    assert.equal(applyHookEvent(prompted, eventFor('SessionEnd', {}, 3000)).sessionsById.get(SESSION_ID).status, STATUS.ended);
   });
 
   it('marks a session finished on Stop, unless its background agents are still working', () => {
@@ -121,7 +132,8 @@ describe('applyHookEvent', () => {
 describe('applyTranscriptTail', () => {
   it('shows the latest transcript text mid-turn, keeping the old text when there is none', () => {
     const afterStop = applyHookEvent(new Map(), eventFor('Stop', { last_assistant_message: 'Old reply.' }, 1000));
-    const afterPrompt = applyHookEvent(afterStop.sessionsById, eventFor('UserPromptSubmit', {}, 2000));
+    const afterPrompt = applyHookEvent(afterStop.sessionsById, eventFor('UserPromptSubmit', { prompt: 'Add  dark\nmode.' }, 2000));
+    assert.equal(afterPrompt.sessionsById.get(SESSION_ID).lastMessage, 'You: Add dark mode.');
     const ticket = { key: 'ABC-123', stage: 'build', stageStartedAt: 2400, designMode: 'superpowers' };
     const midTurn = applyTranscriptTail(afterPrompt.sessionsById, SESSION_ID, { lastMessage: 'Committing PR 1 now.', lastEntryAt: 2500, ticket, entrypoint: 'cli' });
     assert.equal(midTurn.get(SESSION_ID).entrypoint, 'cli');
@@ -299,6 +311,24 @@ describe('sortSessions', () => {
       sortSessions(sessions).map((session) => session.sessionId),
       ['waiting', 'finished-new', 'finished-old', 'running-new', 'running-old'],
     );
+  });
+});
+
+describe('lastMessageFromTranscriptEntries', () => {
+  it('shows your newest prompt until Claude writes a reply to it', () => {
+    const reply = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+    const earlier = [{ type: 'user', message: { content: 'Explain the cache.' } }, reply('The cache keys use the path.')];
+    const prompted = [...earlier, { type: 'user', message: { content: 'Now add dark mode.' } }];
+    assert.equal(lastMessageFromTranscriptEntries(earlier), 'The cache keys use the path.');
+    assert.equal(lastMessageFromTranscriptEntries(prompted), 'You: Now add dark mode.');
+    const working = [
+      ...prompted,
+      { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read' }] } },
+      { type: 'user', message: { content: [{ type: 'tool_result' }] } },
+      { type: 'user', message: { content: '<task-notification>agent done</task-notification>' } },
+    ];
+    assert.equal(lastMessageFromTranscriptEntries(working), 'You: Now add dark mode.');
+    assert.equal(lastMessageFromTranscriptEntries([...working, reply('Adding the theme tokens.')]), 'Adding the theme tokens.');
   });
 });
 

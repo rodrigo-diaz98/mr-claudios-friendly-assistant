@@ -1,6 +1,6 @@
 import { open, readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { endsWithQuestion, STATUS, nameFromCwd } from './session-state.mjs';
+import { endsWithQuestion, STATUS, nameFromCwd, promptPreview } from './session-state.mjs';
 import { stageOfSkill, TICKET_ENTRY_SKILL, TICKET_STAGES } from './stage-skills.mjs';
 
 const SCAN_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -231,9 +231,28 @@ function lastAssistantEntryWithText(entries) {
   );
 }
 
+function isTypedPrompt(entry) {
+  if (entry.type !== 'user' || entry.isSidechain || entry.isMeta || isInterruptMarker(entry)) {
+    return false;
+  }
+  const content = entry.message?.content;
+  if (typeof content === 'string') {
+    return !content.startsWith('<');
+  }
+  return (
+    Array.isArray(content) &&
+    content.some((part) => part.type === 'text') &&
+    !content.some((part) => part.type === 'tool_result')
+  );
+}
+
 export function lastMessageFromTranscriptEntries(entries) {
-  const lastAssistantEntry = lastAssistantEntryWithText(entries);
-  return lastAssistantEntry ? singleLine(textFromAssistantEntry(lastAssistantEntry)) : '';
+  const promptIndex = entries.findLastIndex(isTypedPrompt);
+  const lastAssistantEntry = lastAssistantEntryWithText(entries.slice(promptIndex + 1));
+  if (lastAssistantEntry) {
+    return singleLine(textFromAssistantEntry(lastAssistantEntry));
+  }
+  return promptIndex === -1 ? '' : promptPreview(userTextOf(entries[promptIndex]));
 }
 
 export function singleLine(text) {

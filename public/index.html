@@ -83,7 +83,8 @@
     .tab:hover { color: var(--text); }
     .tab.selected { color: var(--text); background: var(--border); }
 
-    ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+    ul { position: relative; list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+    li.session.leaving { position: absolute; left: 0; right: 0; pointer-events: none; }
     li.session {
       position: relative;
       display: grid;
@@ -272,9 +273,55 @@
     const OVERDUE_AFTER_MS = 10 * 60 * 1000;
     const TICKET_STAGES = ['design', 'build', 'review', 'ship', 'feedback'];
     const stageLabels = { design: 'Design', build: 'Build', review: 'Review', ship: 'Ship', feedback: 'Feedback' };
+    const ENTER_ANIMATION = { duration: 360, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' };
+    const MOVE_ANIMATION = { duration: 360, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' };
+    const LEAVE_ANIMATION = { duration: 260, easing: 'ease-in' };
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
     let showArchived = false;
     let selectedTab = 'desktop';
+    let lastRenderedTab = null;
     let latestState = null;
+
+    function rowPositions(sessionList) {
+      return new Map(
+        [...sessionList.querySelectorAll('li.session:not(.leaving)')].map((row) => [
+          row.dataset.sessionId,
+          { row, top: row.getBoundingClientRect().top },
+        ]),
+      );
+    }
+
+    function animateListChanges(sessionList, previousRows) {
+      const shownSessionIds = new Set();
+      for (const row of sessionList.querySelectorAll('li.session:not(.leaving)')) {
+        shownSessionIds.add(row.dataset.sessionId);
+        const previous = previousRows.get(row.dataset.sessionId);
+        if (!previous) {
+          row.animate(
+            [{ opacity: 0, transform: 'translateY(-8px) scale(0.97)' }, { opacity: 1, transform: 'none' }],
+            ENTER_ANIMATION,
+          );
+          continue;
+        }
+        const offset = previous.top - row.getBoundingClientRect().top;
+        if (Math.abs(offset) > 1) {
+          row.animate([{ transform: `translateY(${offset}px)` }, { transform: 'none' }], MOVE_ANIMATION);
+        }
+      }
+      const listTop = sessionList.getBoundingClientRect().top;
+      for (const [sessionId, { row, top }] of previousRows) {
+        if (shownSessionIds.has(sessionId)) {
+          continue;
+        }
+        row.classList.add('leaving');
+        row.style.top = `${top - listTop}px`;
+        sessionList.prepend(row);
+        const removeRow = () => row.remove();
+        row
+          .animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(0.95)' }], LEAVE_ANIMATION)
+          .finished.then(removeRow, removeRow);
+      }
+    }
 
     function isTerminalSession(session) {
       return Boolean(session.entrypoint) && !session.entrypoint.startsWith('claude-desktop');
@@ -360,6 +407,7 @@
       row.className = ['session', lightColor, needsAttention && 'attention', session.isArchived && 'archived']
         .filter(Boolean)
         .join(' ');
+      row.dataset.sessionId = session.sessionId;
 
       const light = document.createElement('span');
       light.className = `light ${lightColor}`;
@@ -469,7 +517,13 @@
 
       const visibleSessions = tabSessions.filter((session) => showArchived || !session.isArchived);
       const sessionList = document.getElementById('session-list');
-      sessionList.replaceChildren();
+      const shouldAnimate = lastRenderedTab === selectedTab && !reducedMotion.matches;
+      const previousRows = shouldAnimate ? rowPositions(sessionList) : new Map();
+      for (const child of [...sessionList.children]) {
+        if (!child.classList.contains('leaving')) {
+          child.remove();
+        }
+      }
       if (visibleSessions.length === 0) {
         const emptyMessage = document.createElement('li');
         emptyMessage.className = 'empty';
@@ -479,6 +533,10 @@
       for (const session of visibleSessions) {
         sessionList.append(renderSessionRow(session));
       }
+      if (shouldAnimate) {
+        animateListChanges(sessionList, previousRows);
+      }
+      lastRenderedTab = selectedTab;
     }
 
     document.getElementById('desktop-tab').addEventListener('click', () => {
