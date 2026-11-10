@@ -322,6 +322,21 @@
       }
     }
 
+    function pulseCard(row) {
+      if (reducedMotion.matches) {
+        return;
+      }
+      const glow = 'color-mix(in srgb, var(--claude) 85%, transparent)';
+      row.animate(
+        [
+          { transform: 'none', boxShadow: `0 0 0 0 ${glow}`, easing: 'ease-out' },
+          { transform: 'scale(0.97)', boxShadow: `0 0 0 3px ${glow}`, offset: 0.35, easing: 'ease-in-out' },
+          { transform: 'none', boxShadow: '0 0 0 8px transparent' },
+        ],
+        { duration: 500 },
+      );
+    }
+
     function markPopoverCard() {
       for (const row of document.querySelectorAll('li.session:not(.leaving)')) {
         row.classList.toggle('selected', row.dataset.sessionId === popoverSessionId);
@@ -519,7 +534,10 @@
       openLink.className = 'open-button';
       openLink.href = `claude://resume?session=${encodeURIComponent(session.sessionId)}`;
       openLink.textContent = 'Open';
-      openLink.addEventListener('click', () => acknowledge(session.sessionId));
+      openLink.addEventListener('click', () => {
+        pulseCard(row);
+        acknowledge(session.sessionId);
+      });
 
       row.append(light, textBlock, openLink);
       return row;
