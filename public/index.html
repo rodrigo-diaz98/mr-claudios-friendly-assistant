@@ -5,50 +5,156 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mr Claudio's Assistant</title>
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 12px; background: #22292e; color: #eceae4; font-size: 13px; }
-    header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-    .light { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
-    .light.green { background: #3fb950; }
-    .light.yellow { background: #d9b84d; }
-    .light.orange { background: #e8833a; }
-    .light.grey { background: #6e7781; }
-    .light.red { background: #e5534b; }
-    .meta.overdue { color: #e5534b; }
-    .ticket-key { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #96a0a6; margin-right: 6px; }
-    .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 6px 0 4px; }
-    .stage { font-size: 10px; color: #6e7781; text-align: center; }
-    .stage-bar { height: 4px; border-radius: 2px; background: #3a4147; margin-bottom: 3px; }
-    .stage.done { color: #96a0a6; }
-    .stage.done .stage-bar { background: #2f6f3e; }
-    .stage.current { color: #eceae4; font-weight: 600; }
-    .stage.current.green .stage-bar { background: #3fb950; }
-    .stage.current.yellow .stage-bar { background: #d9b84d; }
-    .stage.current.orange .stage-bar { background: #e8833a; }
-    .stage.current.grey .stage-bar { background: #6e7781; }
-    .stage.current.red .stage-bar { background: #e5534b; }
-    h1 { font-size: 14px; margin: 0; font-weight: 600; }
-    .summary { font-size: 12px; color: #96a0a6; margin-top: 2px; }
-    .general-light { width: 16px; height: 16px; }
-    .general-light.orange { animation: flash 0.9s ease-in-out infinite; }
-    @keyframes flash { 0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px rgba(232, 131, 58, 0.7); } 50% { opacity: 0.25; box-shadow: none; } }
-    ul { list-style: none; padding: 0; margin: 0; }
-    li { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; padding: 9px 2px; border-bottom: 1px solid #2c3236; }
-    .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .last-message { font-size: 12px; color: #b9c0c6; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .meta { font-size: 11px; color: #96a0a6; margin-top: 2px; }
-    .open-button { font-size: 12px; color: #eceae4; background: #2c3236; border-radius: 6px; padding: 4px 10px; text-decoration: none; white-space: nowrap; }
-    .open-button:hover { background: #3a4147; }
-    .empty { color: #96a0a6; }
-    .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
-    .tabs[hidden] { display: none; }
-    .tab { font-size: 12px; color: #96a0a6; background: none; border: 1px solid #2c3236; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
-    .tab:hover { color: #eceae4; }
-    .tab.selected { color: #eceae4; background: #2c3236; }
-    .archived-toggle { display: block; margin: 10px auto 0; font-size: 11px; color: #96a0a6; background: none; border: 1px solid #2c3236; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
-    .archived-toggle:hover { color: #eceae4; }
-    li.archived { opacity: 0.55; }
+    :root {
+      --page: #161b1e;
+      --surface: #1f262a;
+      --surface-hover: #252d32;
+      --border: #2b3439;
+      --text: #eceae4;
+      --text-soft: #b4bcc1;
+      --text-muted: #7f8a91;
+      --claude: #d97757;
+      --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+    }
+    .green { --c: #3fb950; }
+    .yellow { --c: #d9b84d; }
+    .orange { --c: #e8833a; }
+    .grey { --c: #6e7781; }
+    .red { --c: #e5534b; }
+    .purple { --c: #a371f7; }
 
-    .mascot { width: 72px; height: 72px; overflow: visible; flex-shrink: 0; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, system-ui, sans-serif;
+      margin: 0;
+      padding: 12px;
+      color: var(--text);
+      font-size: 13px;
+      background-color: var(--page);
+      background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      background-size: 14px 14px;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .hero {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px 10px 10px;
+      margin-bottom: 12px;
+      border-radius: 16px;
+      border: 1px solid color-mix(in srgb, var(--c) 35%, var(--border));
+      background:
+        radial-gradient(90% 160% at 12% 50%, color-mix(in srgb, var(--c) 24%, transparent), transparent 70%),
+        var(--surface);
+      transition: border-color 0.4s, background 0.4s;
+    }
+    .hero.orange { animation: hero-flash 1.2s ease-in-out infinite; }
+    @keyframes hero-flash {
+      0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 0%, transparent); border-color: var(--c); }
+      50% { box-shadow: 0 0 18px 2px color-mix(in srgb, var(--c) 45%, transparent); border-color: color-mix(in srgb, var(--c) 40%, var(--border)); }
+    }
+    .hero-text { min-width: 0; }
+    .eyebrow { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-muted); }
+    h1 { font-size: 19px; margin: 1px 0 0; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+    .summary { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px 2px 7px;
+      border-radius: 999px;
+      color: color-mix(in srgb, var(--c) 70%, white);
+      background: color-mix(in srgb, var(--c) 16%, transparent);
+    }
+    .chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
+
+    .tabs { display: flex; gap: 2px; padding: 3px; margin-bottom: 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); }
+    .tabs[hidden] { display: none; }
+    .tab { flex: 1; font: inherit; font-size: 12px; font-weight: 500; color: var(--text-muted); background: none; border: 0; border-radius: 7px; padding: 4px 10px; cursor: pointer; transition: color 0.15s, background 0.15s; }
+    .tab:hover { color: var(--text); }
+    .tab.selected { color: var(--text); background: var(--border); }
+
+    ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+    li.session {
+      position: relative;
+      display: grid;
+      grid-template-columns: 10px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 10px 10px 12px;
+      border-radius: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    li.session:hover { background: var(--surface-hover); border-color: color-mix(in srgb, var(--c) 30%, var(--border)); }
+    li.session.attention { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 9%, var(--surface)), var(--surface) 55%); }
+    li.session.attention::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c); }
+    li.session.archived { opacity: 0.5; }
+
+    .light { position: relative; align-self: start; margin-top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
+    .light.green::after, .light.orange::after, .light.red::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: var(--c);
+      animation: ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
+    @keyframes ping { 0% { transform: scale(1); opacity: 0.6; } 80%, 100% { transform: scale(2.4); opacity: 0; } }
+
+    .text-block { min-width: 0; }
+    .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ticket-key { font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: var(--text-soft); background: var(--border); border-radius: 4px; padding: 1px 5px; margin-right: 6px; }
+    .last-message { font-size: 12px; color: var(--text-soft); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); margin-top: 6px; min-width: 0; }
+    .status { flex-shrink: 0; font-weight: 600; padding: 1px 7px; border-radius: 5px; color: color-mix(in srgb, var(--c) 70%, white); background: color-mix(in srgb, var(--c) 15%, transparent); }
+    .details { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin: 8px 0 2px; }
+    .stage { font-size: 8.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-muted); text-align: center; }
+    .stage-bar { height: 5px; border-radius: 3px; background: var(--border); margin-bottom: 4px; }
+    .stage.done { color: var(--text-soft); }
+    .stage.done .stage-bar { background: #2f6f3e; }
+    .stage.current { color: var(--text); }
+    .stage.current .stage-bar { background: var(--c); box-shadow: 0 0 8px color-mix(in srgb, var(--c) 60%, transparent); }
+    .stage.current.green .stage-bar {
+      background: linear-gradient(90deg, var(--c) 0%, color-mix(in srgb, var(--c) 55%, white) 50%, var(--c) 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.6s linear infinite;
+    }
+    @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+    .open-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      background: var(--border);
+      border-radius: 8px;
+      padding: 5px 9px 5px 11px;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: background 0.15s, color 0.15s;
+    }
+    .open-button::after { content: '→'; transition: transform 0.15s; }
+    .open-button:hover { background: var(--claude); color: #1a1310; }
+    .open-button:hover::after { transform: translateX(2px); }
+
+    .empty { padding: 22px 12px; text-align: center; color: var(--text-muted); border: 1px dashed var(--border); border-radius: 12px; }
+    .archived-toggle { display: block; margin: 12px auto 4px; font: inherit; font-size: 11px; color: var(--text-muted); background: none; border: 0; padding: 3px 8px; cursor: pointer; }
+    .archived-toggle:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+
+    .mascot { width: 72px; height: 72px; overflow: visible; flex-shrink: 0; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.35)); }
     .mascots { display: flex; align-items: center; flex-shrink: 0; }
     .mascots .mascot { position: relative; }
     .mascots .mascot + .mascot { width: 52px; height: 52px; margin-left: -36px; opacity: 0.6; }
@@ -102,7 +208,7 @@
   </style>
 </head>
 <body>
-  <header>
+  <header id="hero" class="hero grey">
     <template id="mascot-template"><svg class="mascot" viewBox="0 -12 80 72">
       <g class="bob">
         <rect class="arm a" x="7" y="22" width="6" height="12"/>
@@ -142,9 +248,9 @@
       <text class="question" x="69" y="12">?</text>
     </svg></template>
     <div id="mascots" class="mascots"></div>
-    <span id="general-light" class="light general-light grey"></span>
-    <div>
-      <h1>Mr Claudio's Assistant</h1>
+    <div class="hero-text">
+      <div class="eyebrow">Mr Claudio's</div>
+      <h1>Assistant</h1>
       <div id="summary" class="summary"></div>
     </div>
   </header>
@@ -191,16 +297,23 @@
       });
     }
 
-    function summaryText(activeSessions) {
+    function chipFor(text, color) {
+      const chip = document.createElement('span');
+      chip.className = `chip ${color}`;
+      chip.textContent = text;
+      return chip;
+    }
+
+    function summaryChips(activeSessions) {
       const countOf = (status) => activeSessions.filter((session) => session.status === status).length;
-      const parts = [
-        [countOf('waiting'), 'needs you', 'need you'],
-        [countOf('running'), 'running', 'running'],
-        [countOf('finished'), 'finished', 'finished'],
+      const chips = [
+        [countOf('waiting'), 'needs you', 'need you', 'orange'],
+        [countOf('running'), 'running', 'running', 'green'],
+        [countOf('finished'), 'finished', 'finished', 'yellow'],
       ]
         .filter(([count]) => count > 0)
-        .map(([count, singular, plural]) => `${count} ${count === 1 ? singular : plural}`);
-      return parts.length > 0 ? parts.join(' · ') : 'All quiet';
+        .map(([count, singular, plural, color]) => chipFor(`${count} ${count === 1 ? singular : plural}`, color));
+      return chips.length > 0 ? chips : [chipFor('All quiet', 'grey')];
     }
 
     function isMerged(session) {
@@ -226,8 +339,8 @@
       return stages;
     }
 
-    function ticketMetaText(session, statusText) {
-      const parts = isMerged(session) ? ['Merged', statusText] : [statusText];
+    function ticketDetailsText(session) {
+      const parts = [];
       if (session.pullRequests.length > 0) {
         parts.push(`PR ${session.pullRequests.map((pullRequest) => pullRequest.number).sort((a, b) => a - b).join(' · ')}`);
       }
@@ -238,15 +351,18 @@
     }
 
     function renderSessionRow(session) {
-      const row = document.createElement('li');
-      row.className = session.isArchived ? 'archived' : '';
-
       const lightColor = isOverdue(session) ? 'red' : lightByStatus[session.status];
+      const needsAttention = session.status === 'waiting' || session.status === 'finished';
+      const row = document.createElement('li');
+      row.className = ['session', lightColor, needsAttention && 'attention', session.isArchived && 'archived']
+        .filter(Boolean)
+        .join(' ');
+
       const light = document.createElement('span');
       light.className = `light ${lightColor}`;
 
       const textBlock = document.createElement('div');
-      textBlock.style.minWidth = '0';
+      textBlock.className = 'text-block';
       const name = document.createElement('div');
       name.className = 'name';
       if (session.ticket?.key) {
@@ -261,18 +377,29 @@
       lastMessage.textContent =
         session.status === 'waiting' && session.waitingReason ? session.waitingReason : session.lastMessage;
       const meta = document.createElement('div');
-      meta.className = isOverdue(session) ? 'meta overdue' : 'meta';
-      const statusText =
+      meta.className = 'meta';
+      const status = document.createElement('span');
+      status.className = 'status';
+      const details = document.createElement('span');
+      details.className = 'details';
+      meta.append(status, details);
+      status.textContent =
         session.status === 'waiting'
           ? `${statusLabels.waiting} · ${timeSinceChange(session)}`
           : session.status === 'ended' && session.interrupted
             ? `Stopped by you · ${timeSinceChange(session)}`
             : statusLabels[session.status];
       if (session.ticket) {
-        meta.textContent = ticketMetaText(session, statusText);
+        if (isMerged(session)) {
+          const merged = document.createElement('span');
+          merged.className = 'status purple';
+          merged.textContent = 'Merged';
+          status.after(merged);
+        }
+        details.textContent = ticketDetailsText(session);
         textBlock.append(name, renderStages(session, lightColor), lastMessage, meta);
       } else {
-        meta.textContent = `${statusText} · ${session.cwd.split('/').pop()}`;
+        details.textContent = session.cwd.split('/').pop();
         textBlock.append(name, lastMessage, meta);
       }
 
@@ -309,8 +436,10 @@
 
     function render() {
       renderMascots(latestState.light, latestState.sessions);
-      document.getElementById('general-light').setAttribute('class', `light general-light ${latestState.light}`);
-      document.getElementById('summary').textContent = summaryText(latestState.sessions.filter((session) => !session.isArchived));
+      document.getElementById('hero').className = `hero ${latestState.light}`;
+      document.getElementById('summary').replaceChildren(
+        ...summaryChips(latestState.sessions.filter((session) => !session.isArchived)),
+      );
 
       const sessionsByTab = { desktop: [], terminal: [] };
       for (const session of latestState.sessions) {
