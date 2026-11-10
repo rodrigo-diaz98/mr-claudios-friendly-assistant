@@ -51,7 +51,10 @@
         radial-gradient(90% 160% at 12% 50%, color-mix(in srgb, var(--c) 24%, transparent), transparent 70%),
         var(--surface);
       transition: border-color 0.4s, background 0.4s;
+      user-select: none;
+      cursor: grab;
     }
+    body.dragging, body.dragging * { cursor: grabbing; }
     .hero.orange { animation: hero-flash 1.2s ease-in-out infinite; }
     @keyframes hero-flash {
       0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 0%, transparent); border-color: var(--c); }
@@ -487,6 +490,24 @@
       selectedTab = 'terminal';
       render();
     });
+
+    if (window.assistantWindow) {
+      const hero = document.getElementById('hero');
+      const stopDragging = () => {
+        document.body.classList.remove('dragging');
+        window.assistantWindow.endDrag();
+      };
+      hero.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) {
+          return;
+        }
+        hero.setPointerCapture(event.pointerId);
+        document.body.classList.add('dragging');
+        window.assistantWindow.startDrag();
+      });
+      hero.addEventListener('pointerup', stopDragging);
+      hero.addEventListener('lostpointercapture', stopDragging);
+    }
 
     document.getElementById('archived-toggle').addEventListener('click', () => {
       showArchived = !showArchived;

@@ -20,6 +20,7 @@ import {
   statusFromTranscriptEntries,
   ticketProgressFromEntries,
 } from './transcript-scan.mjs';
+import { cornerBounds, nearestCorner } from './window-corner.mjs';
 
 const SESSION_ID = 'session-a';
 const CWD = '/Users/dev/projects/sample-app';
@@ -495,5 +496,18 @@ describe('ticketProgressFromEntries', () => {
     const direct = ticketProgressFromEntries([command(0, 'zero-to-shipped'), toolUse(3, 'Edit', { file_path: 'a.ts' })], null);
     assert.equal(direct.stageStartedAt, Date.parse(at(3)));
     assert.equal(ticketProgressFromEntries([skill(1, 'ship-it')], null), null);
+  });
+});
+
+describe('window corners', () => {
+  it('snaps a dropped window to the nearest corner of its display', () => {
+    const workArea = { x: 1000, y: 25, width: 1600, height: 900 };
+    const size = { width: 360, height: 460 };
+    assert.equal(nearestCorner({ x: 1100, y: 60, ...size }, workArea), 'top-left');
+    assert.equal(nearestCorner({ x: 2100, y: 60, ...size }, workArea), 'top-right');
+    assert.equal(nearestCorner({ x: 1100, y: 450, ...size }, workArea), 'bottom-left');
+    assert.equal(nearestCorner({ x: 2100, y: 450, ...size }, workArea), 'bottom-right');
+    assert.deepEqual(cornerBounds('top-left', workArea, size, 16), { x: 1016, y: 41, ...size });
+    assert.deepEqual(cornerBounds('bottom-right', workArea, size, 16), { x: 2224, y: 449, ...size });
   });
 });
