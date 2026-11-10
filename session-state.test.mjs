@@ -42,11 +42,14 @@ describe('applyHookEvent', () => {
     assert.deepEqual(afterStop.get(SESSION_ID).pullRequests, []);
   });
 
-  it('keeps the current status when the session is compacted', () => {
+  it('keeps the current status when the session is compacted or resumed', () => {
     const finished = applyHookEvent(new Map(), eventFor('Stop', {}, 1000)).sessionsById;
     const afterCompact = applyHookEvent(finished, eventFor('SessionStart', { source: 'compact' }, 2000)).sessionsById;
     assert.equal(afterCompact.get(SESSION_ID).status, STATUS.finished);
     assert.equal(afterCompact.get(SESSION_ID).statusChangedAt, 1000);
+    const afterResume = applyHookEvent(finished, eventFor('SessionStart', { source: 'resume' }, 2000)).sessionsById;
+    assert.equal(afterResume.get(SESSION_ID).status, STATUS.finished);
+    assert.equal(afterResume.get(SESSION_ID).statusChangedAt, 1000);
     const afterStartup = applyHookEvent(finished, eventFor('SessionStart', { source: 'startup' }, 2000)).sessionsById;
     assert.equal(afterStartup.get(SESSION_ID).status, STATUS.running);
   });

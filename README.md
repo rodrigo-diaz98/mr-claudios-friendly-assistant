@@ -12,7 +12,7 @@ Each session gets a light:
 | Green | running | Claude is working |
 | Grey | ended | Nothing to do |
 
-A waiting session shows how long it has waited and, for a permission prompt, what Claude needs, like "Claude needs your permission to use Bash". Other sessions show Claude's latest message, updated while it works. A session stays green while background agents it launched are still working. A session you interrupt turns grey and says "Stopped by you" until you send a new prompt. Compacting a session keeps its light as it was.
+A waiting session shows how long it has waited and, for a permission prompt, what Claude needs, like "Claude needs your permission to use Bash". Other sessions show Claude's latest message, updated while it works. A session stays green while background agents it launched are still working. A session you interrupt turns grey and says "Stopped by you" until you send a new prompt. Compacting or reopening a session keeps its light as it was.
 
 The header shows one Claudio for each session behind the overall light, up to 5, so two sessions waiting on you show two orange Claudios. A gray line under the title counts your sessions by status, like "1 needs you · 2 running", or says "All quiet". Archived sessions are hidden until you click "Show archived" at the bottom. A session counts as archived if any of the desktop app's session files says so. `/btw` side questions are always hidden, because they show inside the session you asked them from.
 

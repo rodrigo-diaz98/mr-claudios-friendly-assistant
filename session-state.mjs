@@ -31,7 +31,7 @@ export function endsWithQuestion(text) {
 
 export function statusFromHookEvent(eventName, payload) {
   if (eventName === 'SessionStart') {
-    return payload.source === 'compact' ? null : STATUS.running;
+    return payload.source === 'compact' || payload.source === 'resume' ? null : STATUS.running;
   }
   if (eventName === 'UserPromptSubmit') {
     return STATUS.running;
