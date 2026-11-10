@@ -61,6 +61,30 @@
       50% { box-shadow: 0 0 18px 2px color-mix(in srgb, var(--c) 45%, transparent); border-color: color-mix(in srgb, var(--c) 40%, var(--border)); }
     }
     .hero-text { min-width: 0; }
+    .collapse-button {
+      flex-shrink: 0;
+      align-self: flex-start;
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      margin-left: auto;
+      padding: 0;
+      border: 0;
+      border-radius: 8px;
+      color: var(--text-soft);
+      background: color-mix(in srgb, var(--c) 12%, transparent);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .collapse-button:hover { color: var(--text); background: color-mix(in srgb, var(--c) 26%, transparent); }
+    .collapse-button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    body.collapsed .collapse-button svg { transform: rotate(180deg); }
+    body.collapsed { overflow: hidden; }
+    .hero { transition: border-color 0.4s, background 0.4s, margin-bottom 0.25s; }
+    body.collapsed .hero { margin-bottom: 0; }
+    .content { transition: opacity 0.2s ease-out, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    body.collapsed .content { opacity: 0; transform: translateY(-10px) scale(0.98); pointer-events: none; }
     .eyebrow { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-muted); }
     h1 { font-size: 19px; margin: 1px 0 0; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
     .summary { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
@@ -257,13 +281,18 @@
       <h1>Assistant</h1>
       <div id="summary" class="summary"></div>
     </div>
+    <button id="collapse-button" class="collapse-button" type="button" aria-label="Collapse" title="Collapse">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg>
+    </button>
   </header>
-  <div id="tabs" class="tabs" hidden>
-    <button id="desktop-tab" class="tab" type="button"></button>
-    <button id="terminal-tab" class="tab" type="button"></button>
-  </div>
-  <ul id="session-list"></ul>
-  <button id="archived-toggle" class="archived-toggle" type="button"></button>
+  <main id="content" class="content">
+    <div id="tabs" class="tabs" hidden>
+      <button id="desktop-tab" class="tab" type="button"></button>
+      <button id="terminal-tab" class="tab" type="button"></button>
+    </div>
+    <ul id="session-list"></ul>
+    <button id="archived-toggle" class="archived-toggle" type="button"></button>
+  </main>
   <script>
     const statusLabels = { waiting: 'Needs you', finished: 'Finished', running: 'Running', ended: 'Idle' };
     const lightByStatus = { waiting: 'orange', finished: 'yellow', running: 'green', ended: 'grey' };
@@ -276,6 +305,7 @@
     const ENTER_ANIMATION = { duration: 360, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' };
     const MOVE_ANIMATION = { duration: 360, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' };
     const LEAVE_ANIMATION = { duration: 260, easing: 'ease-in' };
+    const COLLAPSE_FADE_MS = 180;
     const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
     let showArchived = false;
     let selectedTab = 'desktop';
@@ -556,7 +586,7 @@
         window.assistantWindow.endDrag();
       };
       hero.addEventListener('pointerdown', (event) => {
-        if (event.button !== 0) {
+        if (event.button !== 0 || event.target.closest('button')) {
           return;
         }
         hero.setPointerCapture(event.pointerId);
@@ -565,6 +595,53 @@
       });
       hero.addEventListener('pointerup', stopDragging);
       hero.addEventListener('lostpointercapture', stopDragging);
+    }
+
+    const collapseButton = document.getElementById('collapse-button');
+    let shrinkTimer = null;
+
+    function collapsedWindowHeight() {
+      const bodyPadding = parseFloat(getComputedStyle(document.body).paddingTop);
+      return Math.ceil(document.getElementById('hero').getBoundingClientRect().height + bodyPadding * 2);
+    }
+
+    function setCollapsed(collapsed, animate) {
+      clearTimeout(shrinkTimer);
+      if (collapsed) {
+        window.scrollTo(0, 0);
+      }
+      document.body.classList.toggle('collapsed', collapsed);
+      const label = collapsed ? 'Expand' : 'Collapse';
+      collapseButton.setAttribute('aria-label', label);
+      collapseButton.title = label;
+      if (!window.assistantWindow) {
+        return;
+      }
+      if (!collapsed) {
+        window.assistantWindow.setCollapsedHeight(null, animate);
+        return;
+      }
+      shrinkTimer = setTimeout(
+        () => window.assistantWindow.setCollapsedHeight(collapsedWindowHeight(), animate),
+        animate ? COLLAPSE_FADE_MS : 0,
+      );
+    }
+
+    collapseButton.addEventListener('click', () => {
+      setCollapsed(!document.body.classList.contains('collapsed'), !reducedMotion.matches);
+    });
+
+    if (window.assistantWindow) {
+      new ResizeObserver(() => {
+        if (document.body.classList.contains('collapsed')) {
+          window.assistantWindow.setCollapsedHeight(collapsedWindowHeight(), false);
+        }
+      }).observe(document.getElementById('hero'));
+      window.assistantWindow.isCollapsed().then((collapsed) => {
+        if (collapsed) {
+          setCollapsed(true, false);
+        }
+      });
     }
 
     document.getElementById('archived-toggle').addEventListener('click', () => {

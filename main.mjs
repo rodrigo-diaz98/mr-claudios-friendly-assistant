@@ -28,13 +28,18 @@ let assistantWindow = null;
 let lastLight = null;
 let placement = loadPlacement();
 let dragTimer = null;
+let collapsedHeight = null;
 
 function loadPlacement() {
   try {
     const saved = JSON.parse(readFileSync(PLACEMENT_PATH, 'utf8'));
-    return { corner: CORNERS.includes(saved.corner) ? saved.corner : DEFAULT_CORNER, displayId: saved.displayId ?? null };
+    return {
+      corner: CORNERS.includes(saved.corner) ? saved.corner : DEFAULT_CORNER,
+      displayId: saved.displayId ?? null,
+      collapsed: saved.collapsed === true,
+    };
   } catch {
-    return { corner: DEFAULT_CORNER, displayId: null };
+    return { corner: DEFAULT_CORNER, displayId: null, collapsed: false };
   }
 }
 
@@ -57,8 +62,17 @@ async function waitForServer() {
 function placeInCorner(animate = false) {
   const display =
     screen.getAllDisplays().find((candidate) => candidate.id === placement.displayId) ?? screen.getPrimaryDisplay();
-  const size = { width: WINDOW_WIDTH, height: WINDOW_HEIGHT };
+  const size = { width: WINDOW_WIDTH, height: collapsedHeight ?? WINDOW_HEIGHT };
   assistantWindow.setBounds(cornerBounds(placement.corner, display.workArea, size, CORNER_MARGIN), animate);
+}
+
+function setCollapsedHeight(_event, height, animate) {
+  collapsedHeight = height;
+  if (placement.collapsed !== (height !== null)) {
+    placement = { ...placement, collapsed: height !== null };
+    savePlacement();
+  }
+  placeInCorner(animate);
 }
 
 function startDrag() {
@@ -80,7 +94,7 @@ function endDrag() {
   dragTimer = null;
   const bounds = assistantWindow.getBounds();
   const display = screen.getDisplayMatching(bounds);
-  placement = { corner: nearestCorner(bounds, display.workArea), displayId: display.id };
+  placement = { ...placement, corner: nearestCorner(bounds, display.workArea), displayId: display.id };
   savePlacement();
   placeInCorner(true);
 }
@@ -101,6 +115,8 @@ function createAssistantWindow() {
   placeInCorner();
   ipcMain.on('drag-start', startDrag);
   ipcMain.on('drag-end', endDrag);
+  ipcMain.handle('is-collapsed', () => placement.collapsed);
+  ipcMain.on('set-collapsed-height', setCollapsedHeight);
   assistantWindow.on('blur', endDrag);
   screen.on('display-removed', () => placeInCorner());
   screen.on('display-metrics-changed', () => placeInCorner());

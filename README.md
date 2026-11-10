@@ -18,7 +18,7 @@ The header shows one Claudio for each session behind the overall light, up to 5,
 
 While a session started with `claude` in a terminal is active, Desktop and Terminal tabs appear above the list. A session goes under the tab of the app it was last used from.
 
-The window sits in a corner of the screen and pops up (without taking focus) when a session turns orange or yellow. It has no title bar: drag it by the header card, and hover the top-left corner to show the close and minimize buttons. When you let go, it snaps to the nearest corner of that display, and it opens there next time (saved in `window.json`, next to `sessions.json`).
+The window sits in a corner of the screen and pops up (without taking focus) when a session turns orange or yellow. It has no title bar: drag it by the header card, and hover the top-left corner to show the close and minimize buttons. When you let go, it snaps to the nearest corner of that display, and it opens there next time (saved in `window.json`, next to `sessions.json`). The chevron button on the header collapses the window down to just the header, staying in its corner; click it again to expand. The window remembers whether it was collapsed.
 
 ## Ticket board
 
