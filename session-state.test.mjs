@@ -18,10 +18,12 @@ import {
   interruptedAtOf,
   lastEntryTimeOf,
   lastMessageFromTranscriptEntries,
+  latestExchangeFromTranscriptEntries,
   statusFromTranscriptEntries,
   ticketProgressFromEntries,
 } from './transcript-scan.mjs';
 import { cornerBounds, nearestCorner } from './window-corner.mjs';
+import { BRIDGE_CONNECTED_MS, createReplyBridge } from './reply-bridge.mjs';
 
 const SESSION_ID = 'session-a';
 const CWD = '/Users/dev/projects/sample-app';
@@ -329,6 +331,52 @@ describe('lastMessageFromTranscriptEntries', () => {
     ];
     assert.equal(lastMessageFromTranscriptEntries(working), 'You: Now add dark mode.');
     assert.equal(lastMessageFromTranscriptEntries([...working, reply('Adding the theme tokens.')]), 'Adding the theme tokens.');
+    assert.deepEqual(latestExchangeFromTranscriptEntries(working), { from: 'you', text: 'Now add dark mode.', ask: null });
+    assert.deepEqual(latestExchangeFromTranscriptEntries([...working, reply('Done.\n\nNothing committed.\n')]), {
+      from: 'claude',
+      text: 'Done.\n\nNothing committed.',
+      ask: null,
+    });
+    assert.equal(latestExchangeFromTranscriptEntries([]), null);
+    const questionBox = {
+      type: 'assistant',
+      message: {
+        content: [{
+          type: 'tool_use',
+          name: 'mcp__ccd_turn__wrap_up',
+          input: {
+            recap: 'Dark mode is in.',
+            ask: 'Commit it? ',
+            actions: [{ label: 'Commit', message: 'Commit and push' }, { label: 'Not yet' }, { action: 'create_pr' }],
+          },
+        }],
+      },
+    };
+    const asked = [...working, questionBox, { type: 'user', message: { content: [{ type: 'tool_result' }] } }, reply('Dark mode is in.')];
+    assert.deepEqual(latestExchangeFromTranscriptEntries(asked).ask, {
+      question: 'Commit it?',
+      choices: [{ label: 'Commit', message: 'Commit and push' }, { label: 'Not yet', message: 'Not yet' }],
+    });
+    assert.equal(latestExchangeFromTranscriptEntries([...asked, { type: 'user', message: { content: 'Commit' } }]).ask, null);
+  });
+});
+
+describe('reply bridge', () => {
+  it('hands each answer to the session once and reports whether its add-on is polling', () => {
+    const bridge = createReplyBridge();
+    const sessions = [{ sessionId: 'a' }, { sessionId: 'b' }];
+    assert.deepEqual(bridge.withBridgeState(sessions, 1000)[0].bridge, { isConnected: false, questions: null });
+    bridge.queueAnswer('a', { text: 'Also do the email templates' });
+    assert.deepEqual(bridge.takeAnswer('a', 2000), { text: 'Also do the email templates' });
+    assert.equal(bridge.takeAnswer('a', 3000), null);
+    const questions = [{ question: 'Which library?', options: [{ label: 'Day.js' }] }];
+    bridge.setOpenQuestions('a', questions);
+    const [connected, other] = bridge.withBridgeState(sessions, 3000 + BRIDGE_CONNECTED_MS);
+    assert.deepEqual(connected.bridge, { isConnected: true, questions });
+    assert.equal(other.bridge.isConnected, false);
+    assert.equal(bridge.withBridgeState(sessions, 3001 + BRIDGE_CONNECTED_MS)[0].bridge.isConnected, false);
+    bridge.setOpenQuestions('a', null);
+    assert.equal(bridge.withBridgeState(sessions, 3000)[0].bridge.questions, null);
   });
 });
 

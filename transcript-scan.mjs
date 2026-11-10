@@ -246,13 +246,34 @@ function isTypedPrompt(entry) {
   );
 }
 
-export function lastMessageFromTranscriptEntries(entries) {
-  const promptIndex = entries.findLastIndex(isTypedPrompt);
-  const lastAssistantEntry = lastAssistantEntryWithText(entries.slice(promptIndex + 1));
-  if (lastAssistantEntry) {
-    return singleLine(textFromAssistantEntry(lastAssistantEntry));
+function questionBoxOf(entries) {
+  const entry = entries.findLast((candidate) => candidate.type === 'assistant' && hasQuestionBox(candidate));
+  if (!entry) {
+    return null;
   }
-  return promptIndex === -1 ? '' : promptPreview(userTextOf(entries[promptIndex]));
+  const { input } = entry.message.content.find((part) => part.type === 'tool_use' && part.name === WRAP_UP_TOOL_NAME);
+  const choices = (input.actions ?? [])
+    .filter((action) => !action.action && action.label)
+    .map(({ label, message }) => ({ label, message: message ?? label }));
+  return { question: input.ask.trim(), choices };
+}
+
+export function latestExchangeFromTranscriptEntries(entries) {
+  const promptIndex = entries.findLastIndex(isTypedPrompt);
+  const sincePrompt = entries.slice(promptIndex + 1);
+  const lastAssistantEntry = lastAssistantEntryWithText(sincePrompt);
+  if (lastAssistantEntry) {
+    return { from: 'claude', text: textFromAssistantEntry(lastAssistantEntry).trim(), ask: questionBoxOf(sincePrompt) };
+  }
+  return promptIndex === -1 ? null : { from: 'you', text: userTextOf(entries[promptIndex]).trim(), ask: null };
+}
+
+export function lastMessageFromTranscriptEntries(entries) {
+  const latest = latestExchangeFromTranscriptEntries(entries);
+  if (!latest) {
+    return '';
+  }
+  return latest.from === 'you' ? promptPreview(latest.text) : singleLine(latest.text);
 }
 
 export function singleLine(text) {

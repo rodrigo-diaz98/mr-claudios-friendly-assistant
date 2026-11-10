@@ -20,6 +20,20 @@ While a session started with `claude` in a terminal is active, Desktop and Termi
 
 The window sits in a corner of the screen and pops up (without taking focus) when a session turns orange or yellow. It has no title bar: drag it by the header card, and hover the top-left corner to show the close and minimize buttons. When you let go, it snaps to the nearest corner of that display, and it opens there next time (saved in `window.json`, next to `sessions.json`). The chevron button on the header collapses the window down to just the header, staying in its corner; click it again to expand. The window remembers whether it was collapsed.
 
+## Reply from the window
+
+Click a session's card to open a popover beside the window, on the side facing the middle of the screen. It shows Claude's full latest response (or your latest prompt, until Claude replies) and lets you answer without switching apps:
+
+- **Reply:** type and press Enter (Shift+Enter for a new line). The text lands in the session as if you typed it there. While Claude is still working, it sends as soon as Claude finishes.
+- **Question picker:** when Claude asks with its options picker, the options show as numbered buttons. Click one (or press its number), or type your own answer. Several questions get a "Send answers" button.
+- **Permission prompts** only get an "Approve in Claude ↗" link: approvals stay inside Claude.
+
+Esc, a click elsewhere, or sending closes the popover.
+
+Replying needs the `mr-claudio-bridge` add-on in `addon/session-bridge/` loaded in each session (see [Load the reply add-on](#load-the-reply-add-on)). Every second it asks the assistant's server for a queued answer for its own session, then types it with `$.prompt.submit`, or, while a question picker is open, answers the picker itself. A session without the add-on still shows its latest response in the popover, but the reply box stays off.
+
+Any program on this Mac that can reach `127.0.0.1:4317` can queue an answer for a session this way, the same trust the hook endpoint already has.
+
 ## Ticket board
 
 A session started with `/zero-to-shipped` shows as a ticket: its key, five stage bars and its pull requests.
@@ -47,6 +61,7 @@ A session started with `/zero-to-shipped` shows as a ticket: its key, five stage
 - `desktop-metadata.mjs` reads the Claude desktop app's session files for titles, archived state and pull requests.
 - `transcript-scan.mjs` also works out ticket progress and pending background agents from the transcript.
 - `session-state.mjs` holds the status rules. `main.mjs` is the Electron entry point.
+- `reply-bridge.mjs` holds queued answers and open question pickers for the popover and the add-on; `public/popover.html` is the popover, and `public/theme.css` the colors both pages share.
 
 ## Requirements
 
@@ -80,6 +95,20 @@ Add these entries to `~/.claude/settings.json` under `hooks`, using the absolute
 ```
 
 Restart your Claude Code sessions afterwards, because hooks load when a session starts.
+
+## Load the reply add-on
+
+To reply from the popover, load the add-on in `addon/session-bridge/` in every session by adding its absolute path to the `env` block of `~/.claude/settings.json` (create the block if it isn't there):
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/mr-claudios-assistant/addon/session-bridge"
+  }
+}
+```
+
+If `CLAUDE_CODE_PLUGIN_DIRS` already names other folders, add this one separated by a `:`. Sessions load it when they start, so restart the ones already open.
 
 ## Run
 

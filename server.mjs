@@ -16,12 +16,14 @@ import {
   STATUS,
 } from './session-state.mjs';
 import { readDesktopMetadata } from './desktop-metadata.mjs';
+import { createReplyBridge } from './reply-bridge.mjs';
 import {
   entrypointOfEntries,
   hasPendingBackgroundAgents,
   interruptedAtOf,
   lastEntryTimeOf,
   lastMessageFromTranscriptEntries,
+  latestExchangeFromTranscriptEntries,
   parseTranscriptLines,
   readTranscriptTail,
   scanTranscripts,
@@ -36,6 +38,8 @@ const savedStatePath = join(homedir(), 'Library', 'Application Support', 'Mr Cla
 const SAVE_DELAY_MS = 500;
 const TRANSCRIPT_SETTLE_MS = 300;
 const TICK_INTERVAL_MS = 5000;
+const PAGE_TYPES = { '/': 'text/html', '/popover.html': 'text/html', '/theme.css': 'text/css' };
+const replyBridge = createReplyBridge();
 
 async function readSavedState() {
   try {
@@ -74,7 +78,8 @@ function saveSoon() {
 async function currentState() {
   const metadataByTranscriptId = await readDesktopMetadata();
   const sessionsWithMetadata = applyDesktopMetadata([...sessionsById.values()], metadataByTranscriptId);
-  const sessions = sortSessions(expireFinishedSessions(sessionsWithMetadata, Date.now()));
+  const now = Date.now();
+  const sessions = replyBridge.withBridgeState(sortSessions(expireFinishedSessions(sessionsWithMetadata, now)), now);
   const activeSessions = sessions.filter((session) => !session.isArchived);
   return { light: generalLight(activeSessions), sessions };
 }
@@ -211,24 +216,70 @@ async function handleAcknowledge(request, response) {
   response.end();
 }
 
-async function handleIndexPage(response) {
-  const html = await readFile(join(here, 'public', 'index.html'), 'utf8');
-  response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-  response.end(html);
+async function handlePage(pathname, response) {
+  const fileName = pathname === '/' ? 'index.html' : pathname.slice(1);
+  const content = await readFile(join(here, 'public', fileName), 'utf8');
+  response.writeHead(200, { 'content-type': `${PAGE_TYPES[pathname]}; charset=utf-8` });
+  response.end(content);
+}
+
+async function handleLatestExchange(sessionId, response) {
+  const transcriptPath = sessionsById.get(sessionId)?.transcriptPath;
+  const rawTranscript = transcriptPath ? await readFile(transcriptPath, 'utf8').catch(() => '') : '';
+  sendJson(response, 200, latestExchangeFromTranscriptEntries(parseTranscriptLines(rawTranscript)));
+}
+
+async function handleQueueAnswer(sessionId, request, response) {
+  replyBridge.queueAnswer(sessionId, JSON.parse(await readRequestBody(request)));
+  response.writeHead(204);
+  response.end();
+}
+
+function handleTakeAnswer(sessionId, response) {
+  const now = Date.now();
+  const wasConnected = replyBridge.isConnected(sessionId, now);
+  const answer = replyBridge.takeAnswer(sessionId, now);
+  if (!wasConnected) {
+    publishState();
+  }
+  if (!answer) {
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+  sendJson(response, 200, answer);
+}
+
+async function handleOpenQuestions(sessionId, request, response) {
+  const { questions } = JSON.parse(await readRequestBody(request));
+  replyBridge.setOpenQuestions(sessionId, questions);
+  publishState();
+  response.writeHead(204);
+  response.end();
 }
 
 const server = createServer(async (request, response) => {
   try {
-    if (request.method === 'POST' && request.url === '/events') {
+    const { pathname } = new URL(request.url, 'http://127.0.0.1');
+    const [, scope, sessionId, action] = pathname.match(/^\/api\/(sessions|bridge)\/([\w-]+)\/(\w+)$/) ?? [];
+    if (request.method === 'POST' && pathname === '/events') {
       await handleHookEvent(request, response);
-    } else if (request.method === 'POST' && request.url === '/acknowledge') {
+    } else if (request.method === 'POST' && pathname === '/acknowledge') {
       await handleAcknowledge(request, response);
-    } else if (request.method === 'GET' && request.url === '/api/state') {
+    } else if (request.method === 'GET' && pathname === '/api/state') {
       await handleState(response);
-    } else if (request.method === 'GET' && request.url === '/api/stream') {
+    } else if (request.method === 'GET' && pathname === '/api/stream') {
       await handleStream(request, response);
-    } else if (request.method === 'GET' && request.url === '/') {
-      await handleIndexPage(response);
+    } else if (request.method === 'GET' && scope === 'sessions' && action === 'latest') {
+      await handleLatestExchange(sessionId, response);
+    } else if (request.method === 'POST' && scope === 'sessions' && action === 'answer') {
+      await handleQueueAnswer(sessionId, request, response);
+    } else if (request.method === 'GET' && scope === 'bridge' && action === 'answer') {
+      handleTakeAnswer(sessionId, response);
+    } else if (request.method === 'POST' && scope === 'bridge' && action === 'questions') {
+      await handleOpenQuestions(sessionId, request, response);
+    } else if (request.method === 'GET' && PAGE_TYPES[pathname]) {
+      await handlePage(pathname, response);
     } else {
       response.writeHead(404);
       response.end();

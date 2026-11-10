@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Session</title>
+  <link rel="stylesheet" href="/theme.css">
+  <style>
+    html, body { background: transparent; }
+    body {
+      font-family: -apple-system, system-ui, sans-serif;
+      margin: 0;
+      padding: 12px 16px 20px;
+      color: var(--text);
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+    body.arrow-left { padding-left: 10px; }
+    body.arrow-right { padding-right: 10px; }
+    .popover {
+      position: relative;
+      padding: 12px;
+      border-radius: 14px;
+      background: var(--surface);
+      border: 1px solid color-mix(in srgb, var(--c) 40%, var(--border));
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+      animation: pop-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    body.arrow-right .popover { transform-origin: right center; }
+    body.arrow-left .popover { transform-origin: left center; }
+    @keyframes pop-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+    .arrow {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      margin-top: -7px;
+      background: var(--surface);
+      border: 1px solid color-mix(in srgb, var(--c) 40%, var(--border));
+      transform: rotate(45deg);
+    }
+    body.arrow-right .arrow { right: -8px; border-left: 0; border-bottom: 0; }
+    body.arrow-left .arrow { left: -8px; border-right: 0; border-top: 0; }
+
+    .pop-head { display: flex; align-items: center; gap: 8px; }
+    .title { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pop-head .open-button { padding: 3px 8px 3px 9px; font-size: 11px; }
+    .close { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-muted); font-size: 15px; cursor: pointer; }
+    .close:hover { color: var(--text); background: var(--border); }
+
+    .who { margin-top: 10px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
+    .response { margin-top: 4px; padding: 9px 11px; border-radius: 10px; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border); font-size: 12px; line-height: 1.5; color: var(--text-soft); max-height: 220px; overflow: auto; overflow-wrap: anywhere; }
+    .response p { margin: 0 0 6px; }
+    .response p:last-child { margin: 0; }
+    .response code { font-family: var(--mono); font-size: 11px; background: var(--border); padding: 0 4px; border-radius: 4px; }
+    .response strong { color: var(--text); }
+    .response.empty { color: var(--text-muted); font-style: italic; }
+
+    .question { font-weight: 600; font-size: 12.5px; margin: 10px 0 7px; }
+    .option { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 7px 10px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface-hover); color: var(--text); margin-bottom: 5px; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+    .option:hover, .option.selected { border-color: color-mix(in srgb, var(--c) 60%, var(--border)); background: color-mix(in srgb, var(--c) 12%, var(--surface)); }
+    .option .key { flex-shrink: 0; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 5px; background: var(--border); font-family: var(--mono); font-size: 10px; color: var(--text-soft); }
+    .option:disabled { opacity: 0.5; cursor: default; }
+    .option:disabled:hover { border-color: var(--border); background: var(--surface-hover); }
+    .option .desc { display: block; font-size: 11px; font-weight: 400; color: var(--text-muted); margin-top: 1px; }
+
+    .composer { display: flex; gap: 6px; margin-top: 8px; align-items: flex-end; }
+    .composer textarea { flex: 1; resize: none; height: 34px; max-height: 96px; font: inherit; font-size: 12px; line-height: 16px; color: var(--text); background: var(--page); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; outline: none; }
+    .composer textarea:focus { border-color: color-mix(in srgb, var(--claude) 60%, var(--border)); }
+    .composer textarea::placeholder { color: var(--text-muted); }
+    .composer textarea:disabled { opacity: 0.5; }
+    .send { flex-shrink: 0; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; font-size: 15px; font-weight: 700; background: var(--claude); color: #1a1310; border: 0; border-radius: 9px; cursor: pointer; }
+    .send:disabled { opacity: 0.4; cursor: default; }
+    .send-all { width: 100%; margin-top: 4px; padding: 7px 0; font: inherit; font-size: 12px; font-weight: 600; background: var(--claude); color: #1a1310; border: 0; border-radius: 9px; cursor: pointer; }
+    .send-all:disabled { opacity: 0.4; cursor: default; }
+    .hint { font-size: 10.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.4; }
+    .request { margin-top: 10px; font-family: var(--mono); font-size: 11px; background: var(--page); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; color: var(--text-soft); }
+    .wide-open { display: block; text-align: center; margin-top: 8px; padding: 7px 0; border-radius: 9px; background: var(--claude); color: #1a1310; font-size: 12px; font-weight: 600; text-decoration: none; }
+  </style>
+</head>
+<body class="arrow-right">
+  <div id="popover" class="popover grey">
+    <div id="arrow" class="arrow"></div>
+    <div class="pop-head">
+      <span id="light" class="light grey"></span>
+      <div id="title" class="title"></div>
+      <a id="open" class="open-button">Open</a>
+      <button id="close" class="close" type="button" aria-label="Close">×</button>
+    </div>
+    <div id="who" class="who"></div>
+    <div id="response" class="response"></div>
+    <div id="action"></div>
+  </div>
+  <script>
+    const lightByStatus = { waiting: 'orange', finished: 'yellow', running: 'green', ended: 'grey' };
+    const sessionId = new URLSearchParams(location.search).get('session');
+    const popover = document.getElementById('popover');
+    let session = null;
+    let latest = null;
+    let lastMessageLoaded = null;
+    let actionKey = '';
+    const selectedLabels = new Map();
+
+    function closePopover() {
+      window.assistantWindow?.closePopover();
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
+    }
+
+    function formatResponse(text) {
+      return text
+        .split(/\n{2,}/)
+        .map((paragraph) =>
+          escapeHtml(paragraph)
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n/g, '<br>'),
+        )
+        .map((paragraph) => `<p>${paragraph}</p>`)
+        .join('');
+    }
+
+    function reportHeight() {
+      requestAnimationFrame(() => {
+        const bodyStyle = getComputedStyle(document.body);
+        const height = popover.offsetHeight + parseFloat(bodyStyle.paddingTop) + parseFloat(bodyStyle.paddingBottom);
+        window.assistantWindow?.resizePopover(Math.ceil(height));
+      });
+    }
+
+    async function send(answer) {
+      await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/answer`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(answer),
+      });
+      closePopover();
+    }
+
+    function composer({ placeholder, isEnabled, onSend }) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'composer';
+      const textarea = document.createElement('textarea');
+      textarea.placeholder = placeholder;
+      textarea.disabled = !isEnabled;
+      const button = document.createElement('button');
+      button.className = 'send';
+      button.type = 'button';
+      button.textContent = '↑';
+      button.setAttribute('aria-label', 'Send');
+      const updateButton = () => {
+        button.disabled = !isEnabled || textarea.value.trim() === '';
+      };
+      const submit = () => {
+        if (!button.disabled) {
+          onSend(textarea.value.trim());
+        }
+      };
+      textarea.rows = 1;
+      textarea.addEventListener('input', () => {
+        updateButton();
+        textarea.style.height = 'auto';
+        textarea.style.height = `${textarea.scrollHeight + 2}px`;
+        reportHeight();
+      });
+      textarea.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          submit();
+        }
+      });
+      button.addEventListener('click', submit);
+      updateButton();
+      wrapper.append(textarea, button);
+      return wrapper;
+    }
+
+    function hint(text) {
+      const element = document.createElement('div');
+      element.className = 'hint';
+      element.textContent = text;
+      return element;
+    }
+
+    function answersFromSelections(questions) {
+      return Object.fromEntries(questions.map(({ question }) => [question, [...(selectedLabels.get(question) ?? [])].join(', ')]));
+    }
+
+    function renderQuestions(questions) {
+      const elements = [];
+      const isSingleChoice = questions.length === 1 && !questions[0].multiSelect;
+      const sendAll = document.createElement('button');
+      sendAll.className = 'send-all';
+      sendAll.type = 'button';
+      sendAll.textContent = 'Send answers';
+      const updateSendAll = () => {
+        sendAll.disabled = questions.some(({ question }) => (selectedLabels.get(question)?.size ?? 0) === 0);
+      };
+      sendAll.addEventListener('click', () => send({ answers: answersFromSelections(questions) }));
+      for (const { question, options, multiSelect } of questions) {
+        const title = document.createElement('div');
+        title.className = 'question';
+        title.textContent = question;
+        elements.push(title);
+        (options ?? []).forEach(({ label, description }, index) => {
+          const option = document.createElement('button');
+          option.className = 'option';
+          option.type = 'button';
+          option.dataset.question = question;
+          option.dataset.label = label;
+          option.innerHTML = `<span class="key">${index + 1}</span><span>${escapeHtml(label)}${description ? `<span class="desc">${escapeHtml(description)}</span>` : ''}</span>`;
+          option.addEventListener('click', () => {
+            if (isSingleChoice) {
+              send({ answers: { [question]: label } });
+              return;
+            }
+            const labels = selectedLabels.get(question) ?? new Set();
+            if (!multiSelect) {
+              labels.clear();
+            }
+            labels.has(label) ? labels.delete(label) : labels.add(label);
+            selectedLabels.set(question, labels);
+            for (const sibling of document.querySelectorAll('.option')) {
+              if (sibling.dataset.question === question) {
+                sibling.classList.toggle('selected', labels.has(sibling.dataset.label));
+              }
+            }
+            updateSendAll();
+          });
+          elements.push(option);
+        });
+      }
+      if (questions.length === 1) {
+        const [{ question }] = questions;
+        elements.push(composer({
+          placeholder: 'Or type your own answer…',
+          isEnabled: true,
+          onSend: (text) => send({ answers: { [question]: text } }),
+        }));
+      }
+      if (!isSingleChoice) {
+        updateSendAll();
+        elements.push(sendAll);
+      }
+      return elements;
+    }
+
+    function renderQuestionBox(ask, isConnected) {
+      if (!ask) {
+        return [];
+      }
+      const title = document.createElement('div');
+      title.className = 'question';
+      title.textContent = ask.question;
+      const choices = ask.choices.map(({ label, message }, index) => {
+        const choice = document.createElement('button');
+        choice.className = 'option';
+        choice.type = 'button';
+        choice.disabled = !isConnected;
+        choice.innerHTML = `<span class="key">${index + 1}</span><span>${escapeHtml(label)}</span>`;
+        choice.addEventListener('click', () => send({ text: message }));
+        return choice;
+      });
+      return [title, ...choices];
+    }
+
+    function renderAction() {
+      const questions = session.bridge?.questions;
+      const isConnected = Boolean(session.bridge?.isConnected);
+      const needsPermission = session.status === 'waiting' && Boolean(session.waitingReason) && !questions;
+      const mode = questions ? 'questions' : needsPermission ? 'permission' : 'reply';
+      const nextKey = JSON.stringify([mode, questions, isConnected, session.status, session.waitingReason, latest?.ask]);
+      if (nextKey === actionKey) {
+        return;
+      }
+      actionKey = nextKey;
+      const action = document.getElementById('action');
+      if (mode === 'questions') {
+        action.replaceChildren(...renderQuestions(questions));
+      } else if (mode === 'permission') {
+        const request = document.createElement('div');
+        request.className = 'request';
+        request.textContent = session.waitingReason;
+        const approve = document.createElement('a');
+        approve.className = 'wide-open';
+        approve.href = document.getElementById('open').href;
+        approve.textContent = 'Approve in Claude ↗';
+        action.replaceChildren(request, approve, hint('Permission prompts stay in Claude.'));
+      } else {
+        const replyHint = !isConnected
+          ? 'Replying from here needs the session add-on, which this session hasn’t loaded.'
+          : session.status === 'running'
+            ? 'Claude is working. Your reply sends as soon as it finishes.'
+            : '⏎ sends · ⇧⏎ new line · Esc closes';
+        action.replaceChildren(
+          ...renderQuestionBox(latest?.ask, isConnected),
+          composer({
+            placeholder: latest?.ask ? 'Or type your own reply…' : 'Reply to Claude…',
+            isEnabled: isConnected,
+            onSend: (text) => send({ text }),
+          }),
+          hint(replyHint),
+        );
+      }
+      action.querySelector('textarea:not(:disabled)')?.focus();
+    }
+
+    function render() {
+      if (!session) {
+        return;
+      }
+      const light = lightByStatus[session.status];
+      popover.className = `popover ${light}`;
+      document.getElementById('light').className = `light ${light}`;
+      document.getElementById('title').textContent = session.name;
+      document.getElementById('open').href = `claude://resume?session=${encodeURIComponent(session.sessionId)}`;
+      const response = document.getElementById('response');
+      document.getElementById('who').textContent = latest?.from === 'you' ? 'You' : 'Claude';
+      response.classList.toggle('empty', !latest);
+      response.innerHTML = latest ? formatResponse(latest.text) : 'No messages yet.';
+      renderAction();
+      reportHeight();
+    }
+
+    async function loadLatest() {
+      latest = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/latest`).then((reply) => reply.json());
+      render();
+    }
+
+    document.getElementById('close').addEventListener('click', closePopover);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closePopover();
+        return;
+      }
+      const options = [...document.querySelectorAll('.option')];
+      const index = Number(event.key) - 1;
+      if (document.activeElement?.tagName !== 'TEXTAREA' && options[index]) {
+        options[index].click();
+      }
+    });
+
+    window.assistantWindow?.onPopoverLayout(({ side, arrowY }) => {
+      document.body.className = side === 'left' ? 'arrow-right' : 'arrow-left';
+      document.getElementById('arrow').style.top = `${arrowY - popover.offsetTop}px`;
+    });
+
+    new EventSource('/api/stream').addEventListener('message', (event) => {
+      session = JSON.parse(event.data).sessions.find((candidate) => candidate.sessionId === sessionId) ?? null;
+      if (!session) {
+        closePopover();
+        return;
+      }
+      if (session.lastMessage !== lastMessageLoaded) {
+        lastMessageLoaded = session.lastMessage;
+        loadLatest();
+      }
+      render();
+    });
+  </script>
+</body>
+</html>

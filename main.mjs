@@ -23,8 +23,12 @@ const SERVER_RETRY_LIMIT = 40;
 const ATTENTION_LIGHTS = new Set(['yellow', 'orange']);
 const DRAG_FRAME_MS = 16;
 const PLACEMENT_PATH = join(homedir(), 'Library', 'Application Support', 'Mr Claudio Session Assistant', 'window.json');
+const POPOVER_WIDTH = 360;
+const POPOVER_ARROW_TOP = 44;
 
 let assistantWindow = null;
+let popoverWindow = null;
+let popoverCardCenterY = 0;
 let lastLight = null;
 let placement = loadPlacement();
 let dragTimer = null;
@@ -67,6 +71,9 @@ function placeInCorner(animate = false) {
 }
 
 function setCollapsedHeight(_event, height, animate) {
+  if (height !== null) {
+    closePopover();
+  }
   collapsedHeight = height;
   if (placement.collapsed !== (height !== null)) {
     placement = { ...placement, collapsed: height !== null };
@@ -75,7 +82,78 @@ function setCollapsedHeight(_event, height, animate) {
   placeInCorner(animate);
 }
 
+function sendLinksOutside(window) {
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  window.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(ASSISTANT_URL)) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+}
+
+function layoutPopover(height) {
+  const assistantBounds = assistantWindow.getBounds();
+  const { workArea } = screen.getDisplayMatching(assistantBounds);
+  const side = placement.corner.endsWith('right') ? 'left' : 'right';
+  const x = side === 'left' ? assistantBounds.x - POPOVER_WIDTH : assistantBounds.x + assistantBounds.width;
+  const cardCenterY = assistantBounds.y + popoverCardCenterY;
+  const lowestY = workArea.y + workArea.height - height;
+  const y = Math.round(Math.max(workArea.y, Math.min(lowestY, cardCenterY - POPOVER_ARROW_TOP)));
+  popoverWindow.setBounds({ x, y, width: POPOVER_WIDTH, height });
+  popoverWindow.webContents.send('popover-layout', { side, arrowY: cardCenterY - y });
+}
+
+function closePopover() {
+  if (popoverWindow && !popoverWindow.isDestroyed()) {
+    popoverWindow.close();
+  }
+}
+
+function openPopover(_event, sessionId, cardCenterY) {
+  closePopover();
+  popoverCardCenterY = cardCenterY;
+  const window = new BrowserWindow({
+    width: POPOVER_WIDTH,
+    height: 200,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    resizable: false,
+    fullscreenable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    webPreferences: { preload: PRELOAD_PATH },
+  });
+  popoverWindow = window;
+  sendLinksOutside(window);
+  window.on('blur', () => window.close());
+  window.on('closed', () => {
+    if (popoverWindow === window) {
+      popoverWindow = null;
+      assistantWindow.webContents.send('popover-closed');
+    }
+  });
+  window.loadURL(`${ASSISTANT_URL}popover.html?session=${encodeURIComponent(sessionId)}`);
+}
+
+function resizePopover(event, height) {
+  if (!popoverWindow || event.sender !== popoverWindow.webContents) {
+    return;
+  }
+  layoutPopover(height);
+  if (!popoverWindow.isVisible()) {
+    popoverWindow.show();
+  }
+}
+
 function startDrag() {
+  closePopover();
   clearInterval(dragTimer);
   const cursor = screen.getCursorScreenPoint();
   const [windowX, windowY] = assistantWindow.getPosition();
@@ -117,21 +195,14 @@ function createAssistantWindow() {
   ipcMain.on('drag-end', endDrag);
   ipcMain.handle('is-collapsed', () => placement.collapsed);
   ipcMain.on('set-collapsed-height', setCollapsedHeight);
+  ipcMain.on('popover-open', openPopover);
+  ipcMain.on('popover-resize', resizePopover);
+  ipcMain.on('popover-close', closePopover);
   assistantWindow.on('blur', endDrag);
   screen.on('display-removed', () => placeInCorner());
   screen.on('display-metrics-changed', () => placeInCorner());
 
-  assistantWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: 'deny' };
-  });
-  assistantWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(ASSISTANT_URL)) {
-      event.preventDefault();
-      shell.openExternal(url);
-    }
-  });
-
+  sendLinksOutside(assistantWindow);
   assistantWindow.loadURL(ASSISTANT_URL);
 }
 
