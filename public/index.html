@@ -81,12 +81,6 @@
     }
     .chip::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--c); }
 
-    .tabs { display: flex; gap: 2px; padding: 2px; margin: 8px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); }
-    .tabs[hidden] { display: none; }
-    .tab { flex: 1; font: inherit; font-size: 11px; font-weight: 500; color: var(--text-muted); background: none; border: 0; border-radius: 6px; padding: 3px 8px; cursor: pointer; transition: color 0.15s, background 0.15s; }
-    .tab:hover { color: var(--text); }
-    .tab.selected { color: var(--text); background: var(--border); }
-
     ul { position: relative; list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
     li.session.leaving { position: absolute; left: 0; right: 0; pointer-events: none; }
     li.session {
@@ -120,6 +114,7 @@
     .last-message { font-size: 11px; color: var(--text-soft); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .meta { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text-muted); margin-top: 8px; min-width: 0; }
     .status { flex-shrink: 0; font-weight: 600; padding: 0 5px; border-radius: 4px; color: color-mix(in srgb, var(--c) 70%, white); background: color-mix(in srgb, var(--c) 15%, transparent); }
+    .source { flex-shrink: 0; color: var(--text-soft); }
     .details { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin: 7px 0 3px; }
@@ -245,10 +240,6 @@
     </button>
   </header>
   <main id="content" class="content">
-    <div id="tabs" class="tabs" hidden>
-      <button id="desktop-tab" class="tab" type="button"></button>
-      <button id="terminal-tab" class="tab" type="button"></button>
-    </div>
     <ul id="session-list"></ul>
     <button id="archived-toggle" class="archived-toggle" type="button"></button>
   </main>
@@ -267,8 +258,7 @@
     const COLLAPSE_FADE_MS = 180;
     const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
     let showArchived = false;
-    let selectedTab = 'desktop';
-    let lastRenderedTab = null;
+    let hasRendered = false;
     let popoverSessionId = null;
     let latestState = null;
 
@@ -502,9 +492,12 @@
       meta.className = 'meta';
       const status = document.createElement('span');
       status.className = 'status';
+      const source = document.createElement('span');
+      source.className = 'source';
+      source.textContent = isTerminalSession(session) ? 'Terminal' : 'Desktop';
       const details = document.createElement('span');
       details.className = 'details';
-      meta.append(status, details);
+      meta.append(status, source, details);
       status.textContent =
         session.status === 'waiting'
           ? `${statusLabels.waiting} · ${timeSinceChange(session)}`
@@ -575,32 +568,14 @@
       freshSummary.append(...summaryChips(latestState.sessions.filter((session) => !session.isArchived)));
       morph(document.getElementById('summary'), freshSummary);
 
-      const sessionsByTab = { desktop: [], terminal: [] };
-      for (const session of latestState.sessions) {
-        sessionsByTab[isTerminalSession(session) ? 'terminal' : 'desktop'].push(session);
-      }
-      const hasActiveTerminalSession = sessionsByTab.terminal.some(
-        (session) => !session.isArchived && session.status !== 'ended',
-      );
-      if (!hasActiveTerminalSession) {
-        selectedTab = 'desktop';
-      }
-      const countNotArchived = (sessions) => sessions.filter((session) => !session.isArchived).length;
-      document.getElementById('tabs').hidden = !hasActiveTerminalSession;
-      document.getElementById('desktop-tab').textContent = `Desktop (${countNotArchived(sessionsByTab.desktop)})`;
-      document.getElementById('terminal-tab').textContent = `Terminal (${countNotArchived(sessionsByTab.terminal)})`;
-      document.getElementById('desktop-tab').classList.toggle('selected', selectedTab === 'desktop');
-      document.getElementById('terminal-tab').classList.toggle('selected', selectedTab === 'terminal');
-
-      const tabSessions = sessionsByTab[selectedTab];
-      const archivedCount = tabSessions.filter((session) => session.isArchived).length;
+      const archivedCount = latestState.sessions.filter((session) => session.isArchived).length;
       document.getElementById('archived-toggle').textContent = showArchived
         ? 'Hide archived'
         : `Show archived (${archivedCount})`;
 
-      const visibleSessions = tabSessions.filter((session) => showArchived || !session.isArchived);
+      const visibleSessions = latestState.sessions.filter((session) => showArchived || !session.isArchived);
       const sessionList = document.getElementById('session-list');
-      const shouldAnimate = lastRenderedTab === selectedTab && !reducedMotion.matches;
+      const shouldAnimate = hasRendered && !reducedMotion.matches;
       const previousRows = shouldAnimate ? rowPositions(sessionList) : new Map();
       const shownRowsById = new Map(
         [...sessionList.querySelectorAll('li.session:not(.leaving)')].map((row) => [row.dataset.sessionId, row]),
@@ -629,18 +604,8 @@
       if (shouldAnimate) {
         animateListChanges(sessionList, previousRows);
       }
-      lastRenderedTab = selectedTab;
+      hasRendered = true;
     }
-
-    document.getElementById('desktop-tab').addEventListener('click', () => {
-      selectedTab = 'desktop';
-      render();
-    });
-
-    document.getElementById('terminal-tab').addEventListener('click', () => {
-      selectedTab = 'terminal';
-      render();
-    });
 
     if (window.assistantWindow) {
       const hero = document.getElementById('hero');

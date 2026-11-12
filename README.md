@@ -16,7 +16,7 @@ A waiting session shows how long it has waited and, for a permission prompt, wha
 
 The header shows one Claudio for each session behind the overall light, up to 5, so two sessions waiting on you show two orange Claudios. Thin dividers separate the header and each session, with no card borders. Colored chips under the title count your sessions by status, like "1 needs you" and "2 running", or say "All quiet". Sessions that need you (waiting or finished) get a colored edge on their row, and the header's divider pulses orange while one waits. Cards fade in when a session appears, fade out when it's archived or goes away, and slide into place when a session moves to another status group. Archived sessions are hidden until you click "Show archived" at the bottom. A session counts as archived if any of the desktop app's session files says so. `/btw` side questions are always hidden, because they show inside the session you asked them from.
 
-While a session started with `claude` in a terminal is active, Desktop and Terminal tabs appear above the list. A session goes under the tab of the app it was last used from.
+Desktop and terminal sessions share one list, and each row says "Desktop" or "Terminal", from the app it was last used from. Open resumes any session, terminal ones included, in the Claude desktop app.
 
 The window sits in a corner of the screen and pops up (without taking focus) when a session turns orange or yellow. It has no title bar: drag it by the header, and hover the top-left corner to show the close and minimize buttons. When you let go, it snaps to the nearest corner of that display, and it opens there next time (saved in `window.json`, next to `sessions.json`). The chevron button on the header collapses the window down to just the header, staying in its corner; click it again to expand. The window remembers whether it was collapsed.
 
@@ -125,8 +125,10 @@ curl http://127.0.0.1:4317/api/state
 To stop it:
 
 ```bash
-kill $(lsof -ti tcp:4317)
+kill $(lsof -ti tcp:4317 -sTCP:LISTEN)
 ```
+
+Keep `-sTCP:LISTEN`: sessions with the reply add-on keep a connection open to the port, and without it the command would kill them too.
 
 ## Launcher
 
