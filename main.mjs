@@ -15,8 +15,8 @@ app.setName(APP_NAME);
 
 const ASSISTANT_URL = 'http://127.0.0.1:4317/';
 const STATE_URL = `${ASSISTANT_URL}api/state`;
-const WINDOW_WIDTH = 360;
-const WINDOW_HEIGHT = 460;
+const WINDOW_WIDTH = 320;
+const WINDOW_HEIGHT = 420;
 const CORNER_MARGIN = 16;
 const SERVER_RETRY_INTERVAL_MS = 250;
 const SERVER_RETRY_LIMIT = 40;
