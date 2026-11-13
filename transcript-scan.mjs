@@ -5,6 +5,7 @@ import { stageOfSkill, TICKET_ENTRY_SKILL, TICKET_STAGES } from './stage-skills.
 
 const SCAN_WINDOW_MS = 24 * 60 * 60 * 1000;
 const QUIET_AFTER_MS = 10 * 60 * 1000;
+const BACKGROUND_TASK_LIMIT_MS = 60 * 60 * 1000;
 const WRAP_UP_TOOL_NAME = 'mcp__ccd_turn__wrap_up';
 const NAME_MAX_LENGTH = 80;
 const LAST_MESSAGE_MAX_LENGTH = 140;
@@ -12,6 +13,7 @@ const TAIL_BYTES = 512 * 1024;
 const TASK_NOTIFICATION_ID_PATTERN = /<task-notification>[\s\S]*?<task-id>([^<]+)<\/task-id>/;
 const INTERIM_REPORT_PATTERN = /<summary>[^<]*waiting on its own background work<\/summary>/;
 const EDIT_TOOL_NAMES = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+const STOP_TOOL_NAMES = new Set(['TaskStop', 'KillShell']);
 const INTERRUPT_MARKER = '[Request interrupted by user';
 const COMMAND_NAME_PATTERN = /^(?:<command-message>[^<]*<\/command-message>\s*)?<command-name>\/?([^<]+)<\/command-name>/;
 const TICKET_KEY_IN_BRANCH_PATTERN = /(?:^|\/)([a-z]{2,10}-\d+)(?=-|$)/i;
@@ -53,21 +55,36 @@ function notificationTextOf(entry) {
   return entry.type === 'user' ? entry.message?.content : null;
 }
 
-export function hasPendingBackgroundAgents(entries) {
-  const pendingAgentIds = new Set();
+function stoppedTaskIdsOf(entry) {
+  const contentParts = entry.type === 'assistant' && Array.isArray(entry.message?.content) ? entry.message.content : [];
+  return contentParts
+    .filter((part) => part.type === 'tool_use' && STOP_TOOL_NAMES.has(part.name))
+    .map((part) => part.input?.task_id ?? part.input?.shell_id)
+    .filter(Boolean);
+}
+
+export function hasPendingBackgroundAgents(entries, now) {
+  const startedAtByTaskId = new Map();
   for (const entry of entries) {
+    const startedAt = Date.parse(entry.timestamp ?? '');
     if (entry.toolUseResult?.status === 'async_launched' && entry.toolUseResult.agentId) {
-      pendingAgentIds.add(entry.toolUseResult.agentId);
+      startedAtByTaskId.set(entry.toolUseResult.agentId, startedAt);
+    }
+    if (entry.toolUseResult?.backgroundTaskId) {
+      startedAtByTaskId.set(entry.toolUseResult.backgroundTaskId, startedAt);
+    }
+    for (const stoppedTaskId of stoppedTaskIdsOf(entry)) {
+      startedAtByTaskId.delete(stoppedTaskId);
     }
     const notificationText = notificationTextOf(entry);
     const notifiedAgentId = typeof notificationText === 'string' ? notificationText.match(TASK_NOTIFICATION_ID_PATTERN)?.[1] : null;
     if (notifiedAgentId && INTERIM_REPORT_PATTERN.test(notificationText)) {
-      pendingAgentIds.add(notifiedAgentId);
+      startedAtByTaskId.set(notifiedAgentId, startedAt);
     } else if (notifiedAgentId) {
-      pendingAgentIds.delete(notifiedAgentId);
+      startedAtByTaskId.delete(notifiedAgentId);
     }
   }
-  return pendingAgentIds.size > 0;
+  return [...startedAtByTaskId.values()].some((startedAt) => now - startedAt <= BACKGROUND_TASK_LIMIT_MS);
 }
 
 function commandNameOf(entry) {
@@ -218,7 +235,7 @@ export function statusFromTranscriptEntries(entries, { lastActivityAt, now }) {
   if (!lastMessageEntry || interruptedAtOf(entries) > 0) {
     return STATUS.ended;
   }
-  if (hasPendingBackgroundAgents(entries) && now - lastActivityAt <= QUIET_AFTER_MS) {
+  if (hasPendingBackgroundAgents(entries, now) && now - lastActivityAt <= QUIET_AFTER_MS) {
     return STATUS.running;
   }
   if (lastMessageEntry.type === 'assistant' && lastMessageEntry.message?.stop_reason === 'end_turn') {

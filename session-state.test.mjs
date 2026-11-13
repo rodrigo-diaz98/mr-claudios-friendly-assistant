@@ -469,11 +469,12 @@ describe('statusFromTranscriptEntries', () => {
     assert.equal(statusFromTranscriptEntries(entries, { lastActivityAt: 0, now }), STATUS.ended);
   });
 
-  it('stays running after the turn ends while background agents have not reported back', () => {
+  it('stays running after the turn ends while background agents or commands have not reported back, for up to an hour', () => {
+    const timestamp = new Date(now).toISOString();
     const launched = [
       { type: 'user', message: { content: 'spin up agents' } },
-      { type: 'user', message: { content: [{ type: 'tool_result' }] }, toolUseResult: { status: 'async_launched', agentId: 'agent-1' } },
-      { type: 'user', message: { content: [{ type: 'tool_result' }] }, toolUseResult: { status: 'async_launched', agentId: 'agent-2' } },
+      { type: 'user', timestamp, message: { content: [{ type: 'tool_result' }] }, toolUseResult: { status: 'async_launched', agentId: 'agent-1' } },
+      { type: 'user', timestamp, message: { content: [{ type: 'tool_result' }] }, toolUseResult: { status: 'async_launched', agentId: 'agent-2' } },
       { type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Agents are running.' }] } },
     ];
     const firstReported = [
@@ -489,17 +490,18 @@ describe('statusFromTranscriptEntries', () => {
       },
       { type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'All back.' }] } },
     ];
-    assert.equal(hasPendingBackgroundAgents(launched), true);
+    assert.equal(hasPendingBackgroundAgents(launched, now), true);
     assert.equal(statusFromTranscriptEntries(launched, { lastActivityAt: now, now }), STATUS.running);
     assert.equal(statusFromTranscriptEntries(firstReported, { lastActivityAt: now, now }), STATUS.running);
-    assert.equal(hasPendingBackgroundAgents(allReported), false);
+    assert.equal(hasPendingBackgroundAgents(allReported, now), false);
     assert.equal(statusFromTranscriptEntries(allReported, { lastActivityAt: now, now }), STATUS.finished);
 
     const interimReport = [
       ...allReported,
-      { type: 'user', message: { content: [{ type: 'tool_result' }] }, toolUseResult: { status: 'async_launched', agentId: 'agent-3' } },
+      { type: 'user', timestamp, message: { content: [{ type: 'tool_result' }] }, toolUseResult: { status: 'async_launched', agentId: 'agent-3' } },
       {
         type: 'queue-operation',
+        timestamp,
         content: '<task-notification>\n<task-id>agent-3</task-id>\n<status>completed</status>\n<summary>Agent "Build" is waiting on its own background work</summary>',
       },
     ];
@@ -510,8 +512,31 @@ describe('statusFromTranscriptEntries', () => {
         content: '<task-notification>\n<task-id>agent-3</task-id>\n<status>completed</status>\n<summary>Agent "Build" finished</summary>',
       },
     ];
-    assert.equal(hasPendingBackgroundAgents(interimReport), true);
-    assert.equal(hasPendingBackgroundAgents(finalReport), false);
+    assert.equal(hasPendingBackgroundAgents(interimReport, now), true);
+    assert.equal(hasPendingBackgroundAgents(finalReport, now), false);
+
+    const backgroundCommand = [
+      ...finalReport,
+      { type: 'user', timestamp, message: { content: [{ type: 'tool_result' }] }, toolUseResult: { stdout: '', backgroundTaskId: 'shell-1' } },
+      { type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'The test suite is running in the background.' }] } },
+    ];
+    const commandDone = [
+      ...backgroundCommand,
+      {
+        type: 'queue-operation',
+        content: '<task-notification>\n<task-id>shell-1</task-id>\n<status>completed</status>\n<summary>Background command "Run tests" completed</summary>',
+      },
+    ];
+    assert.equal(statusFromTranscriptEntries(backgroundCommand, { lastActivityAt: now, now }), STATUS.running);
+    assert.equal(hasPendingBackgroundAgents(commandDone, now), false);
+    const commandStopped = [
+      ...backgroundCommand,
+      { type: 'assistant', message: { stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'TaskStop', input: { task_id: 'shell-1' } }] } },
+    ];
+    assert.equal(hasPendingBackgroundAgents(commandStopped, now), false);
+    const anHourLater = now + 60 * 60 * 1000;
+    assert.equal(hasPendingBackgroundAgents(backgroundCommand, anHourLater), true);
+    assert.equal(hasPendingBackgroundAgents(backgroundCommand, anHourLater + 1), false);
   });
 
   it('takes the entrypoint from the latest entry that names one', () => {

@@ -184,7 +184,7 @@ async function withTranscriptFacts(eventName, payload) {
   return {
     ...payload,
     transcript_asks_question: transcriptAsksQuestion(entries),
-    transcript_has_pending_agents: hasPendingBackgroundAgents(entries),
+    transcript_has_pending_agents: hasPendingBackgroundAgents(entries, Date.now()),
   };
 }
 
