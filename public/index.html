@@ -26,7 +26,7 @@
       padding: 12px 10px 14px 8px;
       border-bottom: 1px solid var(--border);
       background: radial-gradient(90% 160% at 12% 50%, color-mix(in srgb, var(--c) 24%, transparent), transparent 70%);
-      transition: border-color 0.4s, background 0.4s;
+      transition: border-color 0.4s, background 0.4s, --c 0.6s ease;
       user-select: none;
       cursor: grab;
     }
@@ -37,14 +37,12 @@
       50% { border-bottom-color: color-mix(in srgb, var(--c) 30%, var(--border)); }
     }
     .hero-text { min-width: 0; }
-    .collapse-button {
-      flex-shrink: 0;
-      align-self: flex-start;
+    .hero-actions { flex-shrink: 0; align-self: flex-start; display: flex; flex-direction: column; gap: 6px; margin-left: auto; }
+    .hero-button {
       display: grid;
       place-items: center;
       width: 22px;
       height: 22px;
-      margin-left: auto;
       padding: 0;
       border: 0;
       border-radius: 6px;
@@ -53,15 +51,14 @@
       cursor: pointer;
       transition: background 0.15s, color 0.15s;
     }
-    .collapse-button:hover { color: var(--text); background: color-mix(in srgb, var(--c) 26%, transparent); }
-    .collapse-button svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .hero-button:hover { color: var(--text); background: color-mix(in srgb, var(--c) 26%, transparent); }
+    .hero-button[hidden] { display: none; }
+    .hero-button svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
     body.collapsed .collapse-button svg { transform: rotate(180deg); }
     body.collapsed { overflow: hidden; }
-    .hero { transition: border-color 0.4s, background 0.4s, margin-bottom 0.25s, --c 0.6s ease; }
     @media (prefers-reduced-motion: reduce) {
       .hero, li.session, li.session::before, li.session::after, .light, .chip, .stage, .stage-bar { transition: none; }
     }
-    body.collapsed .hero { margin-bottom: 0; }
     .content { transition: opacity 0.2s ease-out, transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
     body.collapsed .content { opacity: 0; transform: translateY(-10px) scale(0.98); pointer-events: none; }
     .eyebrow { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-muted); }
@@ -93,7 +90,8 @@
       border-bottom: 1px solid var(--border);
       overflow: hidden;
       isolation: isolate;
-      transition: background 0.15s, border-color 0.15s, --c 0.6s ease;
+      cursor: pointer;
+      transition: background 0.15s, --c 0.6s ease, opacity 0.4s ease;
     }
     li.session:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
     li.session::before, li.session::after { content: ''; position: absolute; opacity: 0; pointer-events: none; transition: opacity 0.6s ease; }
@@ -101,20 +99,19 @@
     li.session::after { inset: 0; z-index: -1; background: linear-gradient(90deg, color-mix(in srgb, var(--c) 9%, transparent), transparent 55%); }
     li.session.attention::before, li.session.attention::after { opacity: 1; }
     li.session.archived { opacity: 0.5; }
-    li.session { transition: background 0.15s, border-color 0.15s, --c 0.6s ease, opacity 0.4s ease; }
-    li.session { cursor: pointer; }
     li.session.selected { background: color-mix(in srgb, var(--c) 10%, transparent); }
 
     li.session .light { align-self: start; width: 8px; height: 8px; margin-top: 5px; }
     .row-actions { display: flex; align-items: center; gap: 4px; }
-    .archive-button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; opacity: 0; transition: opacity 0.15s, color 0.15s, background 0.15s; }
+    .icon-button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; cursor: pointer; transition: opacity 0.15s, color 0.15s, background 0.15s; }
+    .archive-button { background: none; color: var(--text-muted); opacity: 0; }
     li.session:hover .archive-button, .archive-button:focus-visible { opacity: 1; }
     .archive-button:hover { color: var(--text); background: var(--border); }
-    .archive-button.confirming { width: auto; padding: 0 8px; opacity: 1; font: inherit; font-size: 11px; font-weight: 600; color: #1a1310; background: #e5534b; }
-    .archive-button.confirming:hover { color: #1a1310; background: color-mix(in srgb, #e5534b 85%, white); }
-    .dismiss-button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; color: color-mix(in srgb, var(--c) 70%, white); background: color-mix(in srgb, var(--c) 14%, transparent); cursor: pointer; transition: color 0.15s, background 0.15s; }
-    .dismiss-button:hover { color: #1a1310; background: var(--c); }
-    .archive-button svg, .dismiss-button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    .archive-button.confirming { width: auto; padding: 0 8px; opacity: 1; font: inherit; font-size: 11px; font-weight: 600; color: var(--on-accent); background: #e5534b; }
+    .archive-button.confirming:hover { color: var(--on-accent); background: color-mix(in srgb, #e5534b 85%, white); }
+    .dismiss-button { color: color-mix(in srgb, var(--c) 70%, white); background: color-mix(in srgb, var(--c) 14%, transparent); }
+    .dismiss-button:hover { color: var(--on-accent); background: var(--c); }
+    .icon-button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
     li.session .open-button { font-size: 11px; padding: 3px 7px 3px 8px; border-radius: 6px; }
 
     .text-block { min-width: 0; }
@@ -127,8 +124,7 @@
     .details { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin: 7px 0 3px; }
-    .stage { font-size: 8px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-muted); text-align: center; }
-    .stage { transition: color 0.6s ease, --c 0.6s ease; }
+    .stage { font-size: 8px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-muted); text-align: center; transition: color 0.6s ease, --c 0.6s ease; }
     .stage-bar { height: 4px; border-radius: 2px; background: var(--border); margin-bottom: 2px; transition: background-color 0.6s ease, box-shadow 0.6s ease; }
     .stage.done { color: var(--text-soft); }
     .stage.done .stage-bar { background: #2f6f3e; }
@@ -244,9 +240,14 @@
       <h1>Assistant</h1>
       <div id="summary" class="summary"></div>
     </div>
-    <button id="collapse-button" class="collapse-button" type="button" aria-label="Collapse" title="Collapse">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg>
-    </button>
+    <div class="hero-actions">
+      <button id="collapse-button" class="hero-button collapse-button" type="button" aria-label="Collapse" title="Collapse">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg>
+      </button>
+      <a id="first-session-button" class="hero-button" hidden>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9M8.5 4l4 4-4 4"/></svg>
+      </a>
+    </div>
   </header>
   <main id="content" class="content">
     <ul id="session-list"></ul>
@@ -255,8 +256,11 @@
   <script>
     const statusLabels = { waiting: 'Needs you', finished: 'Finished', running: 'Running', ended: 'Idle' };
     const lightByStatus = { waiting: 'orange', finished: 'yellow', running: 'green', ended: 'grey' };
+    const sessionStatusByLight = Object.fromEntries(Object.entries(lightByStatus).map(([status, light]) => [light, status]));
     const mascotStateByLight = { grey: 'sleeping', green: 'running', yellow: 'finished', orange: 'waiting' };
-    const sessionStatusByLight = { grey: 'ended', green: 'running', yellow: 'finished', orange: 'waiting' };
+    const ARCHIVE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v3h-11zM3.5 6.5v6h9v-6M6.5 9h3"/></svg>';
+    const UNARCHIVE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v3h-11zM3.5 6.5v6h9v-6M8 11.5V8M6.5 9.5 8 8l1.5 1.5"/></svg>';
+    const DISMISS_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5 6.5 11.5 12.5 5"/></svg>';
     const MAX_MASCOTS = 5;
     const OVERDUE_AFTER_MS = 10 * 60 * 1000;
     const TICKET_STAGES = ['design', 'build', 'review', 'ship', 'feedback'];
@@ -275,7 +279,7 @@
     let latestState = null;
 
     function morph(shown, fresh) {
-      if (shown.nodeType !== fresh.nodeType || shown.nodeName !== fresh.nodeName || shown.dataset?.key !== fresh.dataset?.key) {
+      if (shown.nodeType !== fresh.nodeType || shown.nodeName !== fresh.nodeName) {
         shown.replaceWith(fresh);
         return;
       }
@@ -397,6 +401,10 @@
       return session.status === 'waiting' && Date.now() - session.statusChangedAt > OVERDUE_AFTER_MS;
     }
 
+    function resumeUrl(sessionId) {
+      return `claude://resume?session=${encodeURIComponent(sessionId)}`;
+    }
+
     function acknowledge(sessionId) {
       fetch('/acknowledge', {
         method: 'POST',
@@ -479,6 +487,28 @@
       return parts.join(' · ');
     }
 
+    function iconButton(action, title, icon) {
+      const button = document.createElement('button');
+      button.className = `icon-button ${action}-button`;
+      button.type = 'button';
+      button.dataset.action = action;
+      button.title = title;
+      button.setAttribute('aria-label', title);
+      button.innerHTML = icon;
+      return button;
+    }
+
+    function renderArchiveButton(session) {
+      const title = session.isArchived ? 'Unarchive' : 'Archive';
+      const button = iconButton('archive', title, session.isArchived ? UNARCHIVE_ICON : ARCHIVE_ICON);
+      if (confirmingArchiveId === session.sessionId) {
+        button.classList.add('confirming');
+        button.setAttribute('aria-label', `Confirm ${title.toLowerCase()}`);
+        button.textContent = `${title}?`;
+      }
+      return button;
+    }
+
     function renderSessionRow(session) {
       const lightColor = isOverdue(session) ? 'red' : lightByStatus[session.status];
       const needsAttention = session.status === 'waiting' || session.status === 'finished';
@@ -493,15 +523,6 @@
         .filter(Boolean)
         .join(' ');
       row.dataset.sessionId = session.sessionId;
-      row.addEventListener('click', (event) => {
-        if (event.target.closest('a, button') || !window.assistantWindow) {
-          return;
-        }
-        const rowBounds = row.getBoundingClientRect();
-        popoverSessionId = session.sessionId;
-        window.assistantWindow.openPopover(session.sessionId, rowBounds.top + rowBounds.height / 2);
-        markPopoverCard();
-      });
 
       const light = document.createElement('span');
       light.className = `light ${lightColor}`;
@@ -553,62 +574,19 @@
 
       const openLink = document.createElement('a');
       openLink.className = 'open-button';
-      openLink.href = `claude://resume?session=${encodeURIComponent(session.sessionId)}`;
+      openLink.dataset.action = 'open';
+      openLink.href = resumeUrl(session.sessionId);
       openLink.textContent = 'Open';
-      openLink.addEventListener('click', () => {
-        pulseCard(row);
-        acknowledge(session.sessionId);
-      });
-
-      const archiveButton = document.createElement('button');
-      const isConfirming = confirmingArchiveId === session.sessionId;
-      archiveButton.className = isConfirming ? 'archive-button confirming' : 'archive-button';
-      archiveButton.type = 'button';
-      archiveButton.title = session.isArchived ? 'Unarchive' : 'Archive';
-      archiveButton.setAttribute('aria-label', isConfirming ? `Confirm ${archiveButton.title.toLowerCase()}` : archiveButton.title);
-      if (isConfirming) {
-        archiveButton.textContent = `${archiveButton.title}?`;
-      } else {
-        archiveButton.innerHTML = session.isArchived
-          ? '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v3h-11zM3.5 6.5v6h9v-6M8 11.5V8M6.5 9.5 8 8l1.5 1.5"/></svg>'
-          : '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v3h-11zM3.5 6.5v6h9v-6M6.5 9h3"/></svg>';
-      }
-      archiveButton.addEventListener('click', (event) => {
-        event.stopPropagation();
-        if (confirmingArchiveId !== session.sessionId) {
-          askToConfirmArchive(session.sessionId);
-          return;
-        }
-        const current = latestState.sessions.find((candidate) => candidate.sessionId === session.sessionId);
-        cancelArchiveConfirmation();
-        setArchived(session.sessionId, !current?.isArchived);
-      });
-      row.addEventListener('mouseleave', () => {
-        if (confirmingArchiveId === session.sessionId) {
-          cancelArchiveConfirmation();
-        }
-      });
 
       const actions = document.createElement('div');
       actions.className = 'row-actions';
-      archiveButton.dataset.key = 'archive';
-      const dismissButton = document.createElement('button');
-      dismissButton.className = 'dismiss-button';
-      dismissButton.type = 'button';
-      dismissButton.dataset.key = 'dismiss';
-      dismissButton.title = 'Dismiss';
-      dismissButton.setAttribute('aria-label', 'Dismiss');
-      dismissButton.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5 6.5 11.5 12.5 5"/></svg>';
-      dismissButton.addEventListener('click', (event) => {
-        event.stopPropagation();
-        acknowledge(session.sessionId);
-      });
-      const canArchiveHere = isTerminalSession(session) && (!session.isArchived || session.archivedHere);
-      actions.append(
-        ...(canArchiveHere ? [archiveButton] : []),
-        ...(session.status === 'finished' ? [dismissButton] : []),
-        openLink,
-      );
+      if (isTerminalSession(session) && (!session.isArchived || session.archivedHere)) {
+        actions.append(renderArchiveButton(session));
+      }
+      if (session.status === 'finished') {
+        actions.append(iconButton('dismiss', 'Dismiss', DISMISS_ICON));
+      }
+      actions.append(openLink);
       row.append(light, textBlock, actions);
       return row;
     }
@@ -656,6 +634,15 @@
         : `Show archived (${archivedCount})`;
 
       const visibleSessions = latestState.sessions.filter((session) => showArchived || !session.isArchived);
+      const [firstSession] = visibleSessions;
+      const firstSessionButton = document.getElementById('first-session-button');
+      firstSessionButton.hidden = !firstSession;
+      if (firstSession) {
+        firstSessionButton.href = resumeUrl(firstSession.sessionId);
+        firstSessionButton.dataset.sessionId = firstSession.sessionId;
+        firstSessionButton.title = `Open ${firstSession.name}`;
+        firstSessionButton.setAttribute('aria-label', firstSessionButton.title);
+      }
       const sessionList = document.getElementById('session-list');
       const shouldAnimate = hasRendered && !reducedMotion.matches;
       const previousRows = shouldAnimate ? rowPositions(sessionList) : new Map();
@@ -696,7 +683,7 @@
         window.assistantWindow.endDrag();
       };
       hero.addEventListener('pointerdown', (event) => {
-        if (event.button !== 0 || event.target.closest('button')) {
+        if (event.button !== 0 || event.target.closest('a, button')) {
           return;
         }
         hero.setPointerCapture(event.pointerId);
@@ -711,8 +698,7 @@
     let shrinkTimer = null;
 
     function collapsedWindowHeight() {
-      const bodyPadding = parseFloat(getComputedStyle(document.body).paddingTop);
-      return Math.ceil(document.getElementById('hero').getBoundingClientRect().height + bodyPadding * 2);
+      return Math.ceil(document.getElementById('hero').getBoundingClientRect().height);
     }
 
     function setCollapsed(collapsed, animate) {
@@ -762,6 +748,50 @@
       showArchived = !showArchived;
       render();
     });
+
+    document.getElementById('first-session-button').addEventListener('click', (event) => {
+      const { sessionId } = event.currentTarget.dataset;
+      const row = document.querySelector(`li.session[data-session-id="${CSS.escape(sessionId)}"]:not(.leaving)`);
+      if (row) {
+        pulseCard(row);
+      }
+      acknowledge(sessionId);
+    });
+
+    const sessionList = document.getElementById('session-list');
+    sessionList.addEventListener('click', (event) => {
+      const row = event.target.closest('li.session:not(.leaving)');
+      const session = latestState?.sessions.find((candidate) => candidate.sessionId === row?.dataset.sessionId);
+      if (!session) {
+        return;
+      }
+      const action = event.target.closest('[data-action]')?.dataset.action;
+      if (action === 'open') {
+        pulseCard(row);
+        acknowledge(session.sessionId);
+      } else if (action === 'dismiss') {
+        acknowledge(session.sessionId);
+      } else if (action === 'archive' && confirmingArchiveId !== session.sessionId) {
+        askToConfirmArchive(session.sessionId);
+      } else if (action === 'archive') {
+        cancelArchiveConfirmation();
+        setArchived(session.sessionId, !session.isArchived);
+      } else if (window.assistantWindow) {
+        const rowBounds = row.getBoundingClientRect();
+        popoverSessionId = session.sessionId;
+        window.assistantWindow.openPopover(session.sessionId, rowBounds.top + rowBounds.height / 2);
+        markPopoverCard();
+      }
+    });
+    sessionList.addEventListener(
+      'mouseleave',
+      (event) => {
+        if (event.target.dataset?.sessionId && event.target.dataset.sessionId === confirmingArchiveId) {
+          cancelArchiveConfirmation();
+        }
+      },
+      true,
+    );
 
     new EventSource('/api/stream').addEventListener('message', (event) => {
       latestState = JSON.parse(event.data);

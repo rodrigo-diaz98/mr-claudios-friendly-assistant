@@ -65,6 +65,7 @@ const streamClients = new Set();
 const stateListeners = new Set();
 let lastPublishedJson = '';
 let publishQueue = Promise.resolve();
+let isPublishPending = false;
 let saveTimer = null;
 
 function saveSoon() {
@@ -102,7 +103,15 @@ async function publishNow() {
 }
 
 function publishState() {
-  publishQueue = publishQueue.then(publishNow).catch(() => {});
+  if (!isPublishPending) {
+    isPublishPending = true;
+    publishQueue = publishQueue
+      .then(() => {
+        isPublishPending = false;
+        return publishNow();
+      })
+      .catch(() => {});
+  }
   return publishQueue;
 }
 
@@ -156,9 +165,7 @@ function refreshTranscriptSoon(sessionId) {
 }
 
 async function tick() {
-  for (const sessionId of sessionsById.keys()) {
-    await refreshTranscriptMessage(sessionId).catch(() => {});
-  }
+  await Promise.all([...sessionsById.keys()].map((sessionId) => refreshTranscriptMessage(sessionId).catch(() => {})));
   await publishState();
 }
 
@@ -173,6 +180,11 @@ async function readRequestBody(request) {
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, { 'content-type': 'application/json' });
   response.end(JSON.stringify(body));
+}
+
+function sendStatus(response, statusCode) {
+  response.writeHead(statusCode);
+  response.end();
 }
 
 async function withTranscriptFacts(eventName, payload) {
@@ -190,11 +202,10 @@ async function withTranscriptFacts(eventName, payload) {
 
 async function handleHookEvent(request, response) {
   const { eventName, payload: hookPayload } = JSON.parse(await readRequestBody(request));
+  const now = Date.now();
+  sendStatus(response, 204);
   const payload = await withTranscriptFacts(eventName, hookPayload);
-  const result = applyHookEvent(sessionsById, { eventName, payload, now: Date.now() });
-  setSessionsById(result.sessionsById);
-  response.writeHead(204);
-  response.end();
+  setSessionsById(applyHookEvent(sessionsById, { eventName, payload, now }).sessionsById);
 }
 
 async function handleState(response) {
@@ -207,7 +218,7 @@ async function handleStream(request, response) {
     'cache-control': 'no-cache',
     connection: 'keep-alive',
   });
-  response.write(`data: ${JSON.stringify(await currentState())}\n\n`);
+  response.write(`data: ${lastPublishedJson || JSON.stringify(await currentState())}\n\n`);
   streamClients.add(response);
   request.on('close', () => streamClients.delete(response));
 }
@@ -215,8 +226,7 @@ async function handleStream(request, response) {
 async function handleAcknowledge(request, response) {
   const { sessionId } = JSON.parse(await readRequestBody(request));
   setSessionsById(acknowledgeSession(sessionsById, sessionId, Date.now()));
-  response.writeHead(204);
-  response.end();
+  sendStatus(response, 204);
 }
 
 async function handlePage(pathname, response) {
@@ -228,21 +238,27 @@ async function handlePage(pathname, response) {
 
 async function handleLatestExchange(sessionId, response) {
   const transcriptPath = sessionsById.get(sessionId)?.transcriptPath;
-  const rawTranscript = transcriptPath ? await readFile(transcriptPath, 'utf8').catch(() => '') : '';
-  sendJson(response, 200, latestExchangeFromTranscriptEntries(parseTranscriptLines(rawTranscript)));
+  const fileStats = transcriptPath ? await stat(transcriptPath).catch(() => null) : null;
+  if (!fileStats) {
+    sendJson(response, 200, null);
+    return;
+  }
+  const tailEntries = parseTranscriptLines(await readTranscriptTail(transcriptPath, fileStats.size));
+  const latestExchange =
+    latestExchangeFromTranscriptEntries(tailEntries) ??
+    latestExchangeFromTranscriptEntries(parseTranscriptLines(await readFile(transcriptPath, 'utf8')));
+  sendJson(response, 200, latestExchange);
 }
 
 async function handleArchive(sessionId, request, response) {
   const { archived } = JSON.parse(await readRequestBody(request));
   setSessionsById(archiveSession(sessionsById, sessionId, archived === true));
-  response.writeHead(sessionsById.has(sessionId) ? 204 : 404);
-  response.end();
+  sendStatus(response, sessionsById.has(sessionId) ? 204 : 404);
 }
 
 async function handleQueueAnswer(sessionId, request, response) {
   replyBridge.queueAnswer(sessionId, JSON.parse(await readRequestBody(request)));
-  response.writeHead(204);
-  response.end();
+  sendStatus(response, 204);
 }
 
 function handleTakeAnswer(sessionId, response) {
@@ -253,8 +269,7 @@ function handleTakeAnswer(sessionId, response) {
     publishState();
   }
   if (!answer) {
-    response.writeHead(204);
-    response.end();
+    sendStatus(response, 204);
     return;
   }
   sendJson(response, 200, answer);
@@ -264,8 +279,7 @@ async function handleOpenQuestions(sessionId, request, response) {
   const { questions } = JSON.parse(await readRequestBody(request));
   replyBridge.setOpenQuestions(sessionId, questions);
   publishState();
-  response.writeHead(204);
-  response.end();
+  sendStatus(response, 204);
 }
 
 const server = createServer(async (request, response) => {
@@ -293,12 +307,13 @@ const server = createServer(async (request, response) => {
     } else if (request.method === 'GET' && PAGE_TYPES[pathname]) {
       await handlePage(pathname, response);
     } else {
-      response.writeHead(404);
-      response.end();
+      sendStatus(response, 404);
     }
   } catch (error) {
-    response.writeHead(500);
-    response.end(String(error));
+    if (!response.headersSent) {
+      response.writeHead(500);
+      response.end(String(error));
+    }
   }
 });
 

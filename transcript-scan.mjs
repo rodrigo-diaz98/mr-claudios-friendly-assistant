@@ -1,6 +1,6 @@
 import { open, readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { endsWithQuestion, STATUS, nameFromCwd, promptPreview } from './session-state.mjs';
+import { endsWithQuestion, STATUS, nameFromCwd, previewText, promptPreview } from './session-state.mjs';
 import { stageOfSkill, TICKET_ENTRY_SKILL, TICKET_STAGES } from './stage-skills.mjs';
 
 const SCAN_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -8,7 +8,6 @@ const QUIET_AFTER_MS = 10 * 60 * 1000;
 const BACKGROUND_TASK_LIMIT_MS = 60 * 60 * 1000;
 const WRAP_UP_TOOL_NAME = 'mcp__ccd_turn__wrap_up';
 const NAME_MAX_LENGTH = 80;
-const LAST_MESSAGE_MAX_LENGTH = 140;
 const TAIL_BYTES = 512 * 1024;
 const TASK_NOTIFICATION_ID_PATTERN = /<task-notification>[\s\S]*?<task-id>([^<]+)<\/task-id>/;
 const INTERIM_REPORT_PATTERN = /<summary>[^<]*waiting on its own background work<\/summary>/;
@@ -56,9 +55,8 @@ function notificationTextOf(entry) {
 }
 
 function stoppedTaskIdsOf(entry) {
-  const contentParts = entry.type === 'assistant' && Array.isArray(entry.message?.content) ? entry.message.content : [];
-  return contentParts
-    .filter((part) => part.type === 'tool_use' && STOP_TOOL_NAMES.has(part.name))
+  return toolUsesOf(entry)
+    .filter((part) => STOP_TOOL_NAMES.has(part.name))
     .map((part) => part.input?.task_id ?? part.input?.shell_id)
     .filter(Boolean);
 }
@@ -180,14 +178,9 @@ export function lastPromptAtOf(entries) {
   return Date.parse(entries.findLast(isTypedPrompt)?.timestamp ?? '') || 0;
 }
 
-function hasQuestionBox(entry) {
-  const contentParts = Array.isArray(entry.message?.content) ? entry.message.content : [];
-  return contentParts.some(
-    (part) =>
-      part.type === 'tool_use' &&
-      part.name === WRAP_UP_TOOL_NAME &&
-      typeof part.input?.ask === 'string' &&
-      part.input.ask.trim().length > 0,
+function questionBoxPartOf(entry) {
+  return toolUsesOf(entry).find(
+    (part) => part.name === WRAP_UP_TOOL_NAME && typeof part.input?.ask === 'string' && part.input.ask.trim().length > 0,
   );
 }
 
@@ -198,7 +191,7 @@ export function transcriptAsksQuestion(entries) {
   }
   return (
     endsWithQuestion(textFromAssistantEntry(lastMessageEntry)) ||
-    entriesSincePrompt(entries).some((entry) => entry.type === 'assistant' && hasQuestionBox(entry))
+    entriesSincePrompt(entries).some(questionBoxPartOf)
   );
 }
 
@@ -277,11 +270,11 @@ function isTypedPrompt(entry) {
 }
 
 function questionBoxOf(entries) {
-  const entry = entries.findLast((candidate) => candidate.type === 'assistant' && hasQuestionBox(candidate));
+  const entry = entries.findLast(questionBoxPartOf);
   if (!entry) {
     return null;
   }
-  const { input } = entry.message.content.find((part) => part.type === 'tool_use' && part.name === WRAP_UP_TOOL_NAME);
+  const { input } = questionBoxPartOf(entry);
   const choices = (input.actions ?? [])
     .map(({ action, label, message }) =>
       action ? { label: APP_ACTION_LABELS[action], message: APP_ACTION_LABELS[action] } : { label, message: message ?? label },
@@ -305,11 +298,7 @@ export function lastMessageFromTranscriptEntries(entries) {
   if (!latest) {
     return '';
   }
-  return latest.from === 'you' ? promptPreview(latest.text) : singleLine(latest.text);
-}
-
-export function singleLine(text) {
-  return text.replace(/\s+/g, ' ').trim().slice(0, LAST_MESSAGE_MAX_LENGTH);
+  return latest.from === 'you' ? promptPreview(latest.text) : previewText(latest.text);
 }
 
 export function nameFromTranscriptEntries(entries, cwd) {

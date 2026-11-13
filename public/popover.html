@@ -69,13 +69,13 @@
     .composer textarea:focus { border-color: color-mix(in srgb, var(--claude) 60%, var(--border)); }
     .composer textarea::placeholder { color: var(--text-muted); }
     .composer textarea:disabled { opacity: 0.5; }
-    .send { flex-shrink: 0; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; font-size: 15px; font-weight: 700; background: var(--claude); color: #1a1310; border: 0; border-radius: 9px; cursor: pointer; }
+    .send { flex-shrink: 0; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; font-size: 15px; font-weight: 700; background: var(--claude); color: var(--on-accent); border: 0; border-radius: 9px; cursor: pointer; }
     .send:disabled { opacity: 0.4; cursor: default; }
-    .send-all { width: 100%; margin-top: 4px; padding: 7px 0; font: inherit; font-size: 12px; font-weight: 600; background: var(--claude); color: #1a1310; border: 0; border-radius: 9px; cursor: pointer; }
+    .send-all { width: 100%; margin-top: 4px; padding: 7px 0; font: inherit; font-size: 12px; font-weight: 600; background: var(--claude); color: var(--on-accent); border: 0; border-radius: 9px; cursor: pointer; }
     .send-all:disabled { opacity: 0.4; cursor: default; }
     .hint { font-size: 10.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.4; }
     .request { margin-top: 10px; font-family: var(--mono); font-size: 11px; background: var(--page); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; color: var(--text-soft); }
-    .wide-open { display: block; text-align: center; margin-top: 8px; padding: 7px 0; border-radius: 9px; background: var(--claude); color: #1a1310; font-size: 12px; font-weight: 600; text-decoration: none; }
+    .wide-open { display: block; text-align: center; margin-top: 8px; padding: 7px 0; border-radius: 9px; background: var(--claude); color: var(--on-accent); font-size: 12px; font-weight: 600; text-decoration: none; }
   </style>
 </head>
 <body class="arrow-right">
@@ -184,6 +184,21 @@
       return element;
     }
 
+    function questionTitle(text) {
+      const title = document.createElement('div');
+      title.className = 'question';
+      title.textContent = text;
+      return title;
+    }
+
+    function optionButton(index, label, description) {
+      const option = document.createElement('button');
+      option.className = 'option';
+      option.type = 'button';
+      option.innerHTML = `<span class="key">${index + 1}</span><span>${escapeHtml(label)}${description ? `<span class="desc">${escapeHtml(description)}</span>` : ''}</span>`;
+      return option;
+    }
+
     function answersFromSelections(questions) {
       return Object.fromEntries(questions.map(({ question }) => [question, [...(selectedLabels.get(question) ?? [])].join(', ')]));
     }
@@ -200,17 +215,11 @@
       };
       sendAll.addEventListener('click', () => send({ answers: answersFromSelections(questions) }));
       for (const { question, options, multiSelect } of questions) {
-        const title = document.createElement('div');
-        title.className = 'question';
-        title.textContent = question;
-        elements.push(title);
+        elements.push(questionTitle(question));
         (options ?? []).forEach(({ label, description }, index) => {
-          const option = document.createElement('button');
-          option.className = 'option';
-          option.type = 'button';
+          const option = optionButton(index, label, description);
           option.dataset.question = question;
           option.dataset.label = label;
-          option.innerHTML = `<span class="key">${index + 1}</span><span>${escapeHtml(label)}${description ? `<span class="desc">${escapeHtml(description)}</span>` : ''}</span>`;
           option.addEventListener('click', () => {
             if (isSingleChoice) {
               send({ answers: { [question]: label } });
@@ -251,19 +260,13 @@
       if (!ask) {
         return [];
       }
-      const title = document.createElement('div');
-      title.className = 'question';
-      title.textContent = ask.question;
       const choices = ask.choices.map(({ label, message }, index) => {
-        const choice = document.createElement('button');
-        choice.className = 'option';
-        choice.type = 'button';
+        const choice = optionButton(index, label);
         choice.disabled = !isConnected;
-        choice.innerHTML = `<span class="key">${index + 1}</span><span>${escapeHtml(label)}</span>`;
         choice.addEventListener('click', () => send({ text: message }));
         return choice;
       });
-      return [title, ...choices];
+      return [questionTitle(ask.question), ...choices];
     }
 
     function renderAction() {

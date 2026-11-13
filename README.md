@@ -18,7 +18,7 @@ The header shows one Claudio for each session behind the overall light, up to 5,
 
 Desktop and terminal sessions share one list, and each row says "Desktop" or "Terminal", from the app it was last used from. Open resumes any session, terminal ones included, in the Claude desktop app.
 
-The window sits in a corner of the screen and pops up (without taking focus) when a session turns orange or yellow. It has no title bar: drag it by the header, and hover the top-left corner to show the close and minimize buttons. When you let go, it snaps to the nearest corner of that display, and it opens there next time (saved in `window.json`, next to `sessions.json`). The chevron button on the header collapses the window down to just the header, staying in its corner; click it again to expand. The window remembers whether it was collapsed.
+The window sits in a corner of the screen and pops up (without taking focus) when a session turns orange or yellow. It has no title bar: drag it by the header, and hover the top-left corner to show the close and minimize buttons. When you let go, it snaps to the nearest corner of that display, and it opens there next time (saved in `window.json`, next to `sessions.json`). The chevron button on the header collapses the window down to just the header, staying in its corner; click it again to expand. The arrow button under it opens the first session in the list in Claude, collapsed or not. The window remembers whether it was collapsed.
 
 ## Reply from the window
 
@@ -58,7 +58,8 @@ A session started with `/zero-to-shipped` shows as a ticket: its key, five stage
 - The server watches `~/.claude/projects` and updates a session's preview as soon as its transcript changes.
 - State is saved to `~/Library/Application Support/Mr Claudio Session Assistant/sessions.json`. After a restart, a saved session is kept unless its transcript got a newer message while the app was down.
 - On startup, `transcript-scan.mjs` reads the transcripts in `~/.claude/projects` so sessions show up before any hook fires. It reads every session the Claude desktop app still lists (not archived, not a scheduled run), plus any other transcript from the last 24 hours.
-- `desktop-metadata.mjs` reads the Claude desktop app's session files for titles, archived state and pull requests.- `transcript-scan.mjs` also works out ticket progress and pending background agents from the transcript.
+- `desktop-metadata.mjs` reads the Claude desktop app's session files for titles, archived state and pull requests. It caches each file's fields until the file changes.
+- `transcript-scan.mjs` also works out ticket progress and pending background agents and commands from the transcript.
 - `session-state.mjs` holds the status rules. `main.mjs` is the Electron entry point.
 - `reply-bridge.mjs` holds queued answers and open question pickers for the popover and the add-on; `public/popover.html` is the popover, and `public/theme.css` the colors both pages share.
 

@@ -7,6 +7,7 @@
   --text-soft: #b4bcc1;
   --text-muted: #7f8a91;
   --claude: #d97757;
+  --on-accent: #1a1310;
   --mono: ui-monospace, 'SF Mono', Menlo, monospace;
 }
 @property --c {
@@ -51,5 +52,5 @@
   transition: background 0.15s, color 0.15s;
 }
 .open-button::after { content: '→'; transition: transform 0.15s; }
-.open-button:hover { background: var(--claude); color: #1a1310; }
+.open-button:hover { background: var(--claude); color: var(--on-accent); }
 .open-button:hover::after { transform: translateX(2px); }
