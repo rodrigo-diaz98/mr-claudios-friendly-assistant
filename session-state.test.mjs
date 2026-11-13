@@ -360,7 +360,7 @@ describe('lastMessageFromTranscriptEntries', () => {
           input: {
             recap: 'Dark mode is in.',
             ask: 'Commit it? ',
-            actions: [{ label: 'Commit', message: 'Commit and push' }, { label: 'Not yet' }, { action: 'create_pr' }],
+            actions: [{ label: 'Commit', message: 'Commit and push' }, { label: 'Not yet' }, { action: 'create_pr' }, { action: 'archive' }],
           },
         }],
       },
@@ -368,7 +368,11 @@ describe('lastMessageFromTranscriptEntries', () => {
     const asked = [...working, questionBox, { type: 'user', message: { content: [{ type: 'tool_result' }] } }, reply('Dark mode is in.')];
     assert.deepEqual(latestExchangeFromTranscriptEntries(asked).ask, {
       question: 'Commit it?',
-      choices: [{ label: 'Commit', message: 'Commit and push' }, { label: 'Not yet', message: 'Not yet' }],
+      choices: [
+        { label: 'Commit', message: 'Commit and push' },
+        { label: 'Not yet', message: 'Not yet' },
+        { label: 'Create PR', message: 'Create PR' },
+      ],
     });
     assert.equal(latestExchangeFromTranscriptEntries([...asked, { type: 'user', message: { content: 'Commit' } }]).ask, null);
   });

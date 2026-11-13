@@ -16,6 +16,15 @@ const INTERRUPT_MARKER = '[Request interrupted by user';
 const COMMAND_NAME_PATTERN = /^(?:<command-message>[^<]*<\/command-message>\s*)?<command-name>\/?([^<]+)<\/command-name>/;
 const TICKET_KEY_IN_BRANCH_PATTERN = /(?:^|\/)([a-z]{2,10}-\d+)(?=-|$)/i;
 const TICKET_KEY_IN_TEXT_PATTERN = /\b([A-Z]{2,10}-\d+)\b/;
+const APP_ACTION_LABELS = {
+  commit: 'Commit',
+  create_pr: 'Create PR',
+  merge: 'Merge',
+  fix_ci: 'Fix CI',
+  resolve_conflicts: 'Resolve conflicts',
+  address_comments: 'Address comments',
+  verify: 'Verify',
+};
 
 export function parseTranscriptLines(rawText) {
   const entries = [];
@@ -257,8 +266,10 @@ function questionBoxOf(entries) {
   }
   const { input } = entry.message.content.find((part) => part.type === 'tool_use' && part.name === WRAP_UP_TOOL_NAME);
   const choices = (input.actions ?? [])
-    .filter((action) => !action.action && action.label)
-    .map(({ label, message }) => ({ label, message: message ?? label }));
+    .map(({ action, label, message }) =>
+      action ? { label: APP_ACTION_LABELS[action], message: APP_ACTION_LABELS[action] } : { label, message: message ?? label },
+    )
+    .filter((choice) => choice.label);
   return { question: input.ask.trim(), choices };
 }
 
