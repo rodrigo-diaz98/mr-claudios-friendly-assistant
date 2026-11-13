@@ -83,13 +83,14 @@ export function applyHookEvent(sessionsById, { eventName, payload, now }) {
     ...previousSession,
     sessionId,
     status: nextStatus,
-    statusChangedAt: statusChanged ? now : previousSession.statusChangedAt,
+    statusChangedAt: statusChanged || eventName === 'Stop' ? now : previousSession.statusChangedAt,
     cwd: payload.cwd ?? previousSession?.cwd ?? '',
     transcriptPath: payload.transcript_path ?? previousSession?.transcriptPath ?? '',
     name: previousSession?.name ?? nameFromCwd(payload.cwd),
     lastMessage: lastMessageFromHookEvent(eventName, payload, previousSession),
     waitingReason: eventName === 'Notification' ? payload.message ?? '' : '',
     interrupted: undefined,
+    archivedHere: eventName === 'UserPromptSubmit' ? false : previousSession?.archivedHere ?? false,
   };
 
   const nextSessionsById = new Map(sessionsById);
@@ -98,10 +99,13 @@ export function applyHookEvent(sessionsById, { eventName, payload, now }) {
   return { sessionsById: nextSessionsById };
 }
 
-function statusChangeFromTail(session, { lastEntryAt, interruptedAt, asksQuestion }) {
+function statusChangeFromTail(session, { lastEntryAt, interruptedAt, asksQuestion, lastPromptAt }) {
   const isActive = session.status === STATUS.running || session.status === STATUS.waiting;
   if (isActive && interruptedAt > session.statusChangedAt) {
     return { status: STATUS.ended, statusChangedAt: interruptedAt, waitingReason: '', interrupted: true };
+  }
+  if (session.status !== STATUS.running && lastPromptAt > session.statusChangedAt && lastPromptAt > interruptedAt) {
+    return { status: STATUS.running, statusChangedAt: lastPromptAt, waitingReason: '', interrupted: undefined };
   }
   if (asksQuestion && session.status !== STATUS.waiting) {
     return { status: STATUS.waiting, statusChangedAt: lastEntryAt, waitingReason: '' };
@@ -115,7 +119,7 @@ function statusChangeFromTail(session, { lastEntryAt, interruptedAt, asksQuestio
 export function applyTranscriptTail(
   sessionsById,
   sessionId,
-  { lastMessage, lastEntryAt, ticket, entrypoint = '', interruptedAt = 0, asksQuestion = false },
+  { lastMessage, lastEntryAt, ticket, entrypoint = '', interruptedAt = 0, asksQuestion = false, lastPromptAt = 0 },
 ) {
   const session = sessionsById.get(sessionId);
   if (!session) {
@@ -125,7 +129,7 @@ export function applyTranscriptTail(
     lastMessage: lastMessage || session.lastMessage,
     ticket: ticket ?? session.ticket ?? null,
     entrypoint: entrypoint || session.entrypoint || '',
-    ...statusChangeFromTail(session, { lastEntryAt, interruptedAt, asksQuestion }),
+    ...statusChangeFromTail(session, { lastEntryAt, interruptedAt, asksQuestion, lastPromptAt }),
   };
   const hasChanges = Object.entries(updatedFields).some(
     ([field, value]) => JSON.stringify(value) !== JSON.stringify(session[field]),
@@ -151,7 +155,7 @@ export function mergeSavedSessions(scannedSessions, savedState) {
     const scanFoundPendingQuestion = scannedSession.status === STATUS.waiting && savedSession?.status !== STATUS.waiting;
     return savedStateIsCurrent && !savedRunningWasSuperseded && !scanFoundPendingQuestion
       ? { ...savedSession, ticket: scannedSession.ticket, entrypoint: scannedSession.entrypoint }
-      : scannedSession;
+      : { ...scannedSession, archivedHere: savedSession?.archivedHere ?? false };
   });
 }
 
@@ -160,14 +164,14 @@ export function applyDesktopMetadata(sessions, metadataByTranscriptId) {
   return ownSessions.map((session) => {
     const metadata = metadataByTranscriptId.get(session.sessionId);
     if (!metadata) {
-      return { ...session, isArchived: false, pullRequests: [] };
+      return { ...session, isArchived: session.archivedHere === true, pullRequests: [] };
     }
     const finishedAndAlreadySeen =
       session.status === STATUS.finished && metadata.lastFocusedAt >= metadata.lastTurnEdgeAt;
     return {
       ...session,
       name: metadata.title || session.name,
-      isArchived: metadata.isArchived,
+      isArchived: metadata.isArchived || session.archivedHere === true,
       pullRequests: metadata.pullRequests,
       status: finishedAndAlreadySeen ? STATUS.ended : session.status,
     };
@@ -212,6 +216,16 @@ export function acknowledgeSession(sessionsById, sessionId, now) {
   }
   const nextSessionsById = new Map(sessionsById);
   nextSessionsById.set(sessionId, { ...session, status: STATUS.ended, statusChangedAt: now });
+  return nextSessionsById;
+}
+
+export function archiveSession(sessionsById, sessionId, isArchived) {
+  const session = sessionsById.get(sessionId);
+  if (!session) {
+    return sessionsById;
+  }
+  const nextSessionsById = new Map(sessionsById);
+  nextSessionsById.set(sessionId, { ...session, archivedHere: isArchived });
   return nextSessionsById;
 }
 

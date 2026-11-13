@@ -106,6 +106,13 @@
     li.session.selected { background: color-mix(in srgb, var(--c) 10%, transparent); }
 
     li.session .light { align-self: start; width: 8px; height: 8px; margin-top: 5px; }
+    .row-actions { display: flex; align-items: center; gap: 4px; }
+    .archive-button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; opacity: 0; transition: opacity 0.15s, color 0.15s, background 0.15s; }
+    li.session:hover .archive-button, .archive-button:focus-visible { opacity: 1; }
+    .archive-button:hover { color: var(--text); background: var(--border); }
+    .archive-button.confirming { width: auto; padding: 0 8px; opacity: 1; font: inherit; font-size: 11px; font-weight: 600; color: #1a1310; background: #e5534b; }
+    .archive-button.confirming:hover { color: #1a1310; background: color-mix(in srgb, #e5534b 85%, white); }
+    .archive-button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
     li.session .open-button { font-size: 11px; padding: 3px 7px 3px 8px; border-radius: 6px; }
 
     .text-block { min-width: 0; }
@@ -257,8 +264,11 @@
     const LEAVE_ANIMATION = { duration: 260, easing: 'ease-in' };
     const COLLAPSE_FADE_MS = 180;
     const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+    const ARCHIVE_CONFIRM_MS = 4000;
     let showArchived = false;
     let hasRendered = false;
+    let confirmingArchiveId = null;
+    let archiveConfirmTimer = null;
     let popoverSessionId = null;
     let latestState = null;
 
@@ -390,6 +400,27 @@
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ sessionId }),
+      });
+    }
+
+    function askToConfirmArchive(sessionId) {
+      clearTimeout(archiveConfirmTimer);
+      confirmingArchiveId = sessionId;
+      archiveConfirmTimer = setTimeout(cancelArchiveConfirmation, ARCHIVE_CONFIRM_MS);
+      render();
+    }
+
+    function cancelArchiveConfirmation() {
+      clearTimeout(archiveConfirmTimer);
+      confirmingArchiveId = null;
+      render();
+    }
+
+    function setArchived(sessionId, archived) {
+      fetch(`/api/sessions/${encodeURIComponent(sessionId)}/archive`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ archived }),
       });
     }
 
@@ -527,7 +558,40 @@
         acknowledge(session.sessionId);
       });
 
-      row.append(light, textBlock, openLink);
+      const archiveButton = document.createElement('button');
+      const isConfirming = confirmingArchiveId === session.sessionId;
+      archiveButton.className = isConfirming ? 'archive-button confirming' : 'archive-button';
+      archiveButton.type = 'button';
+      archiveButton.title = session.isArchived ? 'Unarchive' : 'Archive';
+      archiveButton.setAttribute('aria-label', isConfirming ? `Confirm ${archiveButton.title.toLowerCase()}` : archiveButton.title);
+      if (isConfirming) {
+        archiveButton.textContent = `${archiveButton.title}?`;
+      } else {
+        archiveButton.innerHTML = session.isArchived
+          ? '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v3h-11zM3.5 6.5v6h9v-6M8 11.5V8M6.5 9.5 8 8l1.5 1.5"/></svg>'
+          : '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v3h-11zM3.5 6.5v6h9v-6M6.5 9h3"/></svg>';
+      }
+      archiveButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (confirmingArchiveId !== session.sessionId) {
+          askToConfirmArchive(session.sessionId);
+          return;
+        }
+        const current = latestState.sessions.find((candidate) => candidate.sessionId === session.sessionId);
+        cancelArchiveConfirmation();
+        setArchived(session.sessionId, !current?.isArchived);
+      });
+      row.addEventListener('mouseleave', () => {
+        if (confirmingArchiveId === session.sessionId) {
+          cancelArchiveConfirmation();
+        }
+      });
+
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+      const canArchiveHere = isTerminalSession(session) && (!session.isArchived || session.archivedHere);
+      actions.append(...(canArchiveHere ? [archiveButton] : []), openLink);
+      row.append(light, textBlock, actions);
       return row;
     }
 

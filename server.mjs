@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   acknowledgeSession,
   applyDesktopMetadata,
+  archiveSession,
   applyHookEvent,
   applyTranscriptTail,
   expireFinishedSessions,
@@ -23,6 +24,7 @@ import {
   interruptedAtOf,
   lastEntryTimeOf,
   lastMessageFromTranscriptEntries,
+  lastPromptAtOf,
   latestExchangeFromTranscriptEntries,
   parseTranscriptLines,
   readTranscriptTail,
@@ -136,6 +138,7 @@ async function refreshTranscriptMessage(sessionId) {
       entrypoint: entrypointOfEntries(tailEntries),
       interruptedAt: interruptedAtOf(tailEntries),
       asksQuestion: transcriptAsksQuestion(tailEntries),
+      lastPromptAt: lastPromptAtOf(tailEntries),
       ticket: ticketProgressFromEntries(tailEntries, session.ticket ?? null),
     }),
   );
@@ -229,6 +232,13 @@ async function handleLatestExchange(sessionId, response) {
   sendJson(response, 200, latestExchangeFromTranscriptEntries(parseTranscriptLines(rawTranscript)));
 }
 
+async function handleArchive(sessionId, request, response) {
+  const { archived } = JSON.parse(await readRequestBody(request));
+  setSessionsById(archiveSession(sessionsById, sessionId, archived === true));
+  response.writeHead(sessionsById.has(sessionId) ? 204 : 404);
+  response.end();
+}
+
 async function handleQueueAnswer(sessionId, request, response) {
   replyBridge.queueAnswer(sessionId, JSON.parse(await readRequestBody(request)));
   response.writeHead(204);
@@ -272,6 +282,8 @@ const server = createServer(async (request, response) => {
       await handleStream(request, response);
     } else if (request.method === 'GET' && scope === 'sessions' && action === 'latest') {
       await handleLatestExchange(sessionId, response);
+    } else if (request.method === 'POST' && scope === 'sessions' && action === 'archive') {
+      await handleArchive(sessionId, request, response);
     } else if (request.method === 'POST' && scope === 'sessions' && action === 'answer') {
       await handleQueueAnswer(sessionId, request, response);
     } else if (request.method === 'GET' && scope === 'bridge' && action === 'answer') {

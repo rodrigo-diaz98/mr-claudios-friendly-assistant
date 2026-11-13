@@ -5,6 +5,7 @@ import {
   applyDesktopMetadata,
   applyHookEvent,
   applyTranscriptTail,
+  archiveSession,
   expireFinishedSessions,
   FINISHED_VISIBLE_MS,
   generalLight,
@@ -75,10 +76,13 @@ describe('applyHookEvent', () => {
     assert.equal(withAgents.sessionsById.get(SESSION_ID).status, STATUS.running);
   });
 
-  it('keeps the original status time when the status did not change', () => {
-    const afterFirstStop = applyHookEvent(new Map(), eventFor('Stop', {}, 1000));
-    const afterSecondStop = applyHookEvent(afterFirstStop.sessionsById, eventFor('Stop', {}, 2000));
-    assert.equal(afterSecondStop.sessionsById.get(SESSION_ID).statusChangedAt, 1000);
+  it('keeps the original status time when the status did not change, but restarts it at each turn end', () => {
+    const afterFirstPrompt = applyHookEvent(new Map(), eventFor('UserPromptSubmit', {}, 1000));
+    const afterSecondPrompt = applyHookEvent(afterFirstPrompt.sessionsById, eventFor('UserPromptSubmit', {}, 2000));
+    assert.equal(afterSecondPrompt.sessionsById.get(SESSION_ID).statusChangedAt, 1000);
+    const afterFirstQuestion = applyHookEvent(new Map(), eventFor('Stop', { last_assistant_message: 'Ship it?' }, 1000));
+    const afterSecondQuestion = applyHookEvent(afterFirstQuestion.sessionsById, eventFor('Stop', { last_assistant_message: 'Merge it?' }, 2000));
+    assert.equal(afterSecondQuestion.sessionsById.get(SESSION_ID).statusChangedAt, 2000);
   });
 
   it('marks a session waiting when the reply ends with a question', () => {
@@ -161,6 +165,15 @@ describe('applyTranscriptTail', () => {
     const waitingOnQuestion = applyHookEvent(new Map(), eventFor('Stop', { last_assistant_message: 'Ship it?' }, 5000)).sessionsById;
     const afterQuestion = applyTranscriptTail(waitingOnQuestion, SESSION_ID, { lastMessage: 'Ship it?', lastEntryAt: 6000 });
     assert.equal(afterQuestion.get(SESSION_ID).status, STATUS.waiting);
+  });
+
+  it('moves a session back to running when the transcript shows a prompt the hook missed', () => {
+    const waitingOnQuestion = applyHookEvent(new Map(), eventFor('Stop', { last_assistant_message: 'Ship it?' }, 5000)).sessionsById;
+    const promptMissed = applyTranscriptTail(waitingOnQuestion, SESSION_ID, { lastMessage: 'You: No, fix it first.', lastEntryAt: 6500, lastPromptAt: 6000 }).get(SESSION_ID);
+    assert.equal(promptMissed.status, STATUS.running);
+    assert.equal(promptMissed.statusChangedAt, 6000);
+    const olderPrompt = applyTranscriptTail(waitingOnQuestion, SESSION_ID, { lastMessage: 'Ship it?', lastEntryAt: 5000, lastPromptAt: 4000 });
+    assert.equal(olderPrompt.get(SESSION_ID).status, STATUS.waiting);
   });
 
   it('turns a session waiting when its transcript ends with a question box', () => {
@@ -421,6 +434,13 @@ describe('statusFromTranscriptEntries', () => {
       { type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Done, the numbers are rough.' }] } },
     ];
     assert.equal(statusFromTranscriptEntries(entries, { lastActivityAt: now, now }), STATUS.waiting);
+
+    const nextTurnWithImage = [
+      ...entries,
+      { type: 'user', message: { content: [{ type: 'image' }, { type: 'text', text: 'Here is a screenshot.' }] } },
+      { type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Fixed.' }] } },
+    ];
+    assert.equal(statusFromTranscriptEntries(nextTurnWithImage, { lastActivityAt: now, now }), STATUS.finished);
   });
 
   it('is ended when you interrupted the last turn, until Claude or you continue', () => {
@@ -587,5 +607,24 @@ describe('window corners', () => {
     assert.equal(nearestCorner({ x: 2100, y: 450, ...size }, workArea), 'bottom-right');
     assert.deepEqual(cornerBounds('top-left', workArea, size, 16), { x: 1016, y: 41, ...size });
     assert.deepEqual(cornerBounds('bottom-right', workArea, size, 16), { x: 2224, y: 449, ...size });
+  });
+});
+
+describe('archiving in the assistant', () => {
+  it('hides an archived session until you unarchive it or send it a new prompt, and keeps it across restarts', () => {
+    const finished = applyHookEvent(new Map(), eventFor('Stop', {}, 1000)).sessionsById;
+    const archived = archiveSession(finished, SESSION_ID, true);
+    assert.equal(applyDesktopMetadata([...archived.values()], new Map())[0].isArchived, true);
+    assert.equal(applyDesktopMetadata([...archiveSession(archived, SESSION_ID, false).values()], new Map())[0].isArchived, false);
+    assert.equal(archiveSession(finished, 'session-unknown', true), finished);
+
+    const afterStop = applyHookEvent(archived, eventFor('Stop', {}, 2000)).sessionsById;
+    assert.equal(afterStop.get(SESSION_ID).archivedHere, true);
+    const afterPrompt = applyHookEvent(archived, eventFor('UserPromptSubmit', {}, 2000)).sessionsById;
+    assert.equal(afterPrompt.get(SESSION_ID).archivedHere, false);
+
+    const savedState = { savedAt: 1500, sessions: [...archived.values()] };
+    const scannedNewer = { ...archived.get(SESSION_ID), archivedHere: undefined, lastEntryAt: 3000 };
+    assert.equal(mergeSavedSessions([scannedNewer], savedState)[0].archivedHere, true);
   });
 });

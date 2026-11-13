@@ -145,9 +145,13 @@ export function lastEntryTimeOf(entries) {
 
 function entriesSincePrompt(entries) {
   const lastPromptIndex = entries.findLastIndex(
-    (entry) => entry.type === 'user' && typeof entry.message?.content === 'string',
+    (entry) => (entry.type === 'user' && typeof entry.message?.content === 'string') || isTypedPrompt(entry),
   );
   return entries.slice(lastPromptIndex + 1);
+}
+
+export function lastPromptAtOf(entries) {
+  return Date.parse(entries.findLast(isTypedPrompt)?.timestamp ?? '') || 0;
 }
 
 function hasQuestionBox(entry) {
