@@ -178,6 +178,15 @@ export function lastPromptAtOf(entries) {
   return Date.parse(entries.findLast(isTypedPrompt)?.timestamp ?? '') || 0;
 }
 
+function hasToolResult(entry) {
+  const content = entry.type === 'user' ? entry.message?.content : null;
+  return Array.isArray(content) && content.some((part) => part.type === 'tool_result');
+}
+
+export function lastToolResultAtOf(entries) {
+  return Date.parse(entries.findLast(hasToolResult)?.timestamp ?? '') || 0;
+}
+
 function questionBoxPartOf(entry) {
   return toolUsesOf(entry).find(
     (part) => part.name === WRAP_UP_TOOL_NAME && typeof part.input?.ask === 'string' && part.input.ask.trim().length > 0,

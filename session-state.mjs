@@ -99,7 +99,7 @@ export function applyHookEvent(sessionsById, { eventName, payload, now }) {
   return { sessionsById: nextSessionsById };
 }
 
-function statusChangeFromTail(session, { lastEntryAt, interruptedAt, asksQuestion, lastPromptAt }) {
+function statusChangeFromTail(session, { lastEntryAt, interruptedAt, asksQuestion, lastPromptAt, lastToolResultAt }) {
   const isActive = session.status === STATUS.running || session.status === STATUS.waiting;
   if (isActive && interruptedAt > session.statusChangedAt) {
     return { status: STATUS.ended, statusChangedAt: interruptedAt, waitingReason: '', interrupted: true };
@@ -110,8 +110,8 @@ function statusChangeFromTail(session, { lastEntryAt, interruptedAt, asksQuestio
   if (asksQuestion && session.status !== STATUS.waiting) {
     return { status: STATUS.waiting, statusChangedAt: lastEntryAt, waitingReason: '' };
   }
-  if (session.status === STATUS.waiting && Boolean(session.waitingReason) && lastEntryAt > session.statusChangedAt) {
-    return { status: STATUS.running, statusChangedAt: lastEntryAt, waitingReason: '' };
+  if (session.status === STATUS.waiting && Boolean(session.waitingReason) && lastToolResultAt > session.statusChangedAt) {
+    return { status: STATUS.running, statusChangedAt: lastToolResultAt, waitingReason: '' };
   }
   return null;
 }
@@ -119,7 +119,7 @@ function statusChangeFromTail(session, { lastEntryAt, interruptedAt, asksQuestio
 export function applyTranscriptTail(
   sessionsById,
   sessionId,
-  { lastMessage, lastEntryAt, ticket, entrypoint = '', interruptedAt = 0, asksQuestion = false, lastPromptAt = 0 },
+  { lastMessage, lastEntryAt, ticket, entrypoint = '', interruptedAt = 0, asksQuestion = false, lastPromptAt = 0, lastToolResultAt = 0 },
 ) {
   const session = sessionsById.get(sessionId);
   if (!session) {
@@ -129,7 +129,7 @@ export function applyTranscriptTail(
     lastMessage: lastMessage || session.lastMessage,
     ticket: ticket ?? session.ticket ?? null,
     entrypoint: entrypoint || session.entrypoint || '',
-    ...statusChangeFromTail(session, { lastEntryAt, interruptedAt, asksQuestion, lastPromptAt }),
+    ...statusChangeFromTail(session, { lastEntryAt, interruptedAt, asksQuestion, lastPromptAt, lastToolResultAt }),
   };
   const hasChanges = Object.entries(updatedFields).some(
     ([field, value]) => JSON.stringify(value) !== JSON.stringify(session[field]),

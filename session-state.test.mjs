@@ -19,6 +19,7 @@ import {
   interruptedAtOf,
   lastEntryTimeOf,
   lastMessageFromTranscriptEntries,
+  lastToolResultAtOf,
   latestExchangeFromTranscriptEntries,
   statusFromTranscriptEntries,
   ticketProgressFromEntries,
@@ -152,15 +153,26 @@ describe('applyTranscriptTail', () => {
     assert.equal(applyTranscriptTail(midTurn, 'unknown', { lastMessage: 'Hi.', lastEntryAt: 2500 }), midTurn);
   });
 
-  it('moves a permission prompt back to running once the transcript moves past it, but not a question', () => {
+  it('moves a permission prompt back to running once a tool result lands, but not a question', () => {
     const permissionEvent = eventFor('Notification', { notification_type: 'permission_prompt', message: 'Claude needs permission' }, 5000);
     const waitingOnPermission = applyHookEvent(new Map(), permissionEvent).sessionsById;
-    const beforePrompt = applyTranscriptTail(waitingOnPermission, SESSION_ID, { lastMessage: '', lastEntryAt: 4000 });
+    const beforePrompt = applyTranscriptTail(waitingOnPermission, SESSION_ID, { lastMessage: '', lastEntryAt: 4000, lastToolResultAt: 4000 });
     assert.equal(beforePrompt.get(SESSION_ID).status, STATUS.waiting);
-    const approved = applyTranscriptTail(waitingOnPermission, SESSION_ID, { lastMessage: '', lastEntryAt: 6000 }).get(SESSION_ID);
+    const parallelToolCall = applyTranscriptTail(waitingOnPermission, SESSION_ID, { lastMessage: '', lastEntryAt: 5500, lastToolResultAt: 4000 });
+    assert.equal(parallelToolCall.get(SESSION_ID).status, STATUS.waiting);
+    const approved = applyTranscriptTail(waitingOnPermission, SESSION_ID, { lastMessage: '', lastEntryAt: 6000, lastToolResultAt: 6000 }).get(SESSION_ID);
     assert.equal(approved.status, STATUS.running);
     assert.equal(approved.waitingReason, '');
     assert.equal(approved.statusChangedAt, 6000);
+
+    const permissionTranscript = [
+      { type: 'assistant', timestamp: '2026-01-01T00:00:01.000Z', message: { content: [{ type: 'tool_use', id: 'a', name: 'Bash' }] } },
+      { type: 'user', timestamp: '2026-01-01T00:00:02.000Z', message: { content: [{ type: 'tool_result', tool_use_id: 'a' }] } },
+      { type: 'assistant', timestamp: '2026-01-01T00:00:03.000Z', message: { content: [{ type: 'tool_use', id: 'b', name: 'Bash' }] } },
+      { type: 'user', timestamp: '2026-01-01T00:00:04.000Z', message: { content: 'Looks good' } },
+    ];
+    assert.equal(lastToolResultAtOf(permissionTranscript), Date.parse('2026-01-01T00:00:02.000Z'));
+    assert.equal(lastToolResultAtOf([]), 0);
 
     const waitingOnQuestion = applyHookEvent(new Map(), eventFor('Stop', { last_assistant_message: 'Ship it?' }, 5000)).sessionsById;
     const afterQuestion = applyTranscriptTail(waitingOnQuestion, SESSION_ID, { lastMessage: 'Ship it?', lastEntryAt: 6000 });

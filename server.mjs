@@ -25,6 +25,7 @@ import {
   lastEntryTimeOf,
   lastMessageFromTranscriptEntries,
   lastPromptAtOf,
+  lastToolResultAtOf,
   latestExchangeFromTranscriptEntries,
   parseTranscriptLines,
   readTranscriptTail,
@@ -148,6 +149,7 @@ async function refreshTranscriptMessage(sessionId) {
       interruptedAt: interruptedAtOf(tailEntries),
       asksQuestion: transcriptAsksQuestion(tailEntries),
       lastPromptAt: lastPromptAtOf(tailEntries),
+      lastToolResultAt: lastToolResultAtOf(tailEntries),
       ticket: ticketProgressFromEntries(tailEntries, session.ticket ?? null),
     }),
   );
