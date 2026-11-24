@@ -56,6 +56,14 @@
     .hero-button svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
     body.collapsed .collapse-button svg { transform: rotate(180deg); }
     body.collapsed { overflow: hidden; }
+    body.collapsed .hero { width: max-content; gap: 8px; padding: 6px 8px; border-bottom-color: transparent; }
+    body.collapsed .eyebrow, body.collapsed h1 { display: none; }
+    body.collapsed .summary { flex-wrap: nowrap; margin-top: 0; }
+    body.collapsed .chip { font-size: 11px; padding: 2px 7px 2px 6px; }
+    body.collapsed .chip span:not(:empty) + .chip-label { display: none; }
+    body.collapsed .hero-actions { flex-direction: row; align-self: center; margin-left: 4px; }
+    body.collapsed .mascots .mascot { width: 30px; height: 30px; }
+    body.collapsed .mascots .mascot + .mascot { display: none; }
     @media (prefers-reduced-motion: reduce) {
       .hero, li.session, li.session::before, li.session::after, .light, .chip, .stage, .stage-bar { transition: none; }
     }
@@ -77,6 +85,7 @@
       transition: --c 0.6s ease;
     }
     .chip::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--c); }
+    .chip span:empty { display: none; }
 
     ul { position: relative; list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
     li.session.leaving { position: absolute; left: 0; right: 0; pointer-events: none; }
@@ -434,10 +443,16 @@
       });
     }
 
-    function chipFor(text, color) {
+    function chipFor(count, label, color) {
       const chip = document.createElement('span');
       chip.className = `chip ${color}`;
-      chip.textContent = text;
+      chip.title = `${count} ${label}`.trim();
+      const countText = document.createElement('span');
+      countText.textContent = count;
+      const labelText = document.createElement('span');
+      labelText.className = 'chip-label';
+      labelText.textContent = label;
+      chip.append(countText, labelText);
       return chip;
     }
 
@@ -449,8 +464,8 @@
         [countOf('finished'), 'finished', 'finished', 'yellow'],
       ]
         .filter(([count]) => count > 0)
-        .map(([count, singular, plural, color]) => chipFor(`${count} ${count === 1 ? singular : plural}`, color));
-      return chips.length > 0 ? chips : [chipFor('All quiet', 'grey')];
+        .map(([count, singular, plural, color]) => chipFor(count, count === 1 ? singular : plural, color));
+      return chips.length > 0 ? chips : [chipFor('', 'All quiet', 'grey')];
     }
 
     function isMerged(session) {
@@ -697,8 +712,9 @@
     const collapseButton = document.getElementById('collapse-button');
     let shrinkTimer = null;
 
-    function collapsedWindowHeight() {
-      return Math.ceil(document.getElementById('hero').getBoundingClientRect().height);
+    function collapsedWindowSize() {
+      const { width, height } = document.getElementById('hero').getBoundingClientRect();
+      return { width: Math.ceil(width), height: Math.ceil(height) };
     }
 
     function setCollapsed(collapsed, animate) {
@@ -714,11 +730,11 @@
         return;
       }
       if (!collapsed) {
-        window.assistantWindow.setCollapsedHeight(null, animate);
+        window.assistantWindow.setCollapsedSize(null, animate);
         return;
       }
       shrinkTimer = setTimeout(
-        () => window.assistantWindow.setCollapsedHeight(collapsedWindowHeight(), animate),
+        () => window.assistantWindow.setCollapsedSize(collapsedWindowSize(), animate),
         animate ? COLLAPSE_FADE_MS : 0,
       );
     }
@@ -730,7 +746,7 @@
     if (window.assistantWindow) {
       new ResizeObserver(() => {
         if (document.body.classList.contains('collapsed')) {
-          window.assistantWindow.setCollapsedHeight(collapsedWindowHeight(), false);
+          window.assistantWindow.setCollapsedSize(collapsedWindowSize(), false);
         }
       }).observe(document.getElementById('hero'));
       window.assistantWindow.onPopoverClosed(() => {

@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('assistantWindow', {
   startDrag: () => ipcRenderer.send('drag-start'),
   endDrag: () => ipcRenderer.send('drag-end'),
   isCollapsed: () => ipcRenderer.invoke('is-collapsed'),
-  setCollapsedHeight: (height, animate) => ipcRenderer.send('set-collapsed-height', height, animate),
+  setCollapsedSize: (size, animate) => ipcRenderer.send('set-collapsed-size', size, animate),
   openPopover: (sessionId, cardCenterY) => ipcRenderer.send('popover-open', sessionId, cardCenterY),
   resizePopover: (height) => ipcRenderer.send('popover-resize', height),
   closePopover: () => ipcRenderer.send('popover-close'),

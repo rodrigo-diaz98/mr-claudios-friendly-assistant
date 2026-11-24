@@ -32,7 +32,7 @@ let popoverCardCenterY = 0;
 let lastLight = null;
 let placement = loadPlacement();
 let dragTimer = null;
-let collapsedHeight = null;
+let collapsedSize = null;
 
 function loadPlacement() {
   try {
@@ -66,17 +66,18 @@ async function waitForServer() {
 function placeInCorner(animate = false) {
   const display =
     screen.getAllDisplays().find((candidate) => candidate.id === placement.displayId) ?? screen.getPrimaryDisplay();
-  const size = { width: WINDOW_WIDTH, height: collapsedHeight ?? WINDOW_HEIGHT };
+  const size = collapsedSize ?? { width: WINDOW_WIDTH, height: WINDOW_HEIGHT };
   assistantWindow.setBounds(cornerBounds(placement.corner, display.workArea, size, CORNER_MARGIN), animate);
 }
 
-function setCollapsedHeight(_event, height, animate) {
-  if (height !== null) {
+function setCollapsedSize(_event, size, animate) {
+  if (size !== null) {
     closePopover();
   }
-  collapsedHeight = height;
-  if (placement.collapsed !== (height !== null)) {
-    placement = { ...placement, collapsed: height !== null };
+  collapsedSize = size;
+  assistantWindow.setWindowButtonVisibility(size === null);
+  if (placement.collapsed !== (size !== null)) {
+    placement = { ...placement, collapsed: size !== null };
     savePlacement();
   }
   placeInCorner(animate);
@@ -194,7 +195,7 @@ function createAssistantWindow() {
   ipcMain.on('drag-start', startDrag);
   ipcMain.on('drag-end', endDrag);
   ipcMain.handle('is-collapsed', () => placement.collapsed);
-  ipcMain.on('set-collapsed-height', setCollapsedHeight);
+  ipcMain.on('set-collapsed-size', setCollapsedSize);
   ipcMain.on('popover-open', openPopover);
   ipcMain.on('popover-resize', resizePopover);
   ipcMain.on('popover-close', closePopover);

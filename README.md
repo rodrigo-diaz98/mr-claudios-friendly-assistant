@@ -18,7 +18,7 @@ The header shows one Claudio for each session behind the overall light, up to 5,
 
 Desktop and terminal sessions share one list, and each row says "Desktop" or "Terminal", from the app it was last used from. Open resumes any session, terminal ones included, in the Claude desktop app.
 
-The window sits in a corner of the screen and pops up (without taking focus) when a session turns orange or yellow. It has no title bar: drag it by the header, and hover the top-left corner to show the close and minimize buttons. When you let go, it snaps to the nearest corner of that display, and it opens there next time (saved in `window.json`, next to `sessions.json`). The chevron button on the header collapses the window down to just the header, staying in its corner; click it again to expand. The arrow button under it opens the first session in the list in Claude, collapsed or not. The window remembers whether it was collapsed.
+The window sits in a corner of the screen and pops up (without taking focus) when a session turns orange or yellow. It has no title bar: drag it by the header, and hover the top-left corner to show the close and minimize buttons. When you let go, it snaps to the nearest corner of that display, and it opens there next time (saved in `window.json`, next to `sessions.json`). The chevron button on the header collapses the window into a one-line bar, staying in its corner: one Claudio, a count per status chip (hover a chip for its label) and the two buttons, with the title hidden and the window only as wide as that line. The close and minimize buttons are hidden while collapsed, so the whole bar drags; expand to use them. Click the chevron again to expand. The arrow button under it opens the first session in the list in Claude, collapsed or not. The window remembers whether it was collapsed.
 
 ## Reply from the window
 
@@ -42,8 +42,8 @@ A session started with `/zero-to-shipped` shows as a ticket: its key, five stage
 | --- | --- |
 | Design | runs `/zero-to-shipped` (setup, ticket, `grill-me`, brainstorming, writing plans or plan mode) |
 | Build | runs `superpowers:executing-plans` or `superpowers:subagent-driven-development`, or edits code outside the design skills and plan mode |
-| Review | runs `simplify`, `look-for-bugs` or `code-review` |
-| Ship | runs `open-nice-pr` or `ship-it` |
+| Review | runs `ship-it`, `simplify`, `look-for-bugs` or `code-review` |
+| Ship | runs `open-nice-pr` |
 | Feedback | runs `review-pr-comments`, gets its first Auto-fix event, or has a pull request |
 
 - The skill names for each stage live in `stage-skills.mjs`. On a machine with other skills, add their names to the right stage there and change nothing else. Keep the five stage keys, since the window shows those five bars.
