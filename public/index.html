@@ -610,7 +610,7 @@
       const matchingCount = sessions.filter(
         (session) => !session.isArchived && session.status === sessionStatusByLight[light],
       ).length;
-      const count = Math.min(MAX_MASCOTS, Math.max(1, matchingCount));
+      const count = light === 'grey' ? 1 : Math.min(MAX_MASCOTS, Math.max(1, matchingCount));
       const mascotsElement = document.getElementById('mascots');
       const mascotsKey = `${light}:${count}`;
       const previousKey = mascotsElement.dataset.key;
