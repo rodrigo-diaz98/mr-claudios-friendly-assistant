@@ -39,7 +39,7 @@
       position: absolute;
       inset: 0;
       z-index: -1;
-      background: linear-gradient(90deg, transparent 0%, transparent 18%, var(--surface) 60%);
+      background: linear-gradient(90deg, transparent 0, transparent 30px, var(--surface) 62px);
       pointer-events: none;
     }
     body.dragging, body.dragging * { cursor: grabbing; }
@@ -49,7 +49,7 @@
       50% { border-bottom-color: color-mix(in srgb, var(--c) 30%, var(--border)); }
     }
     .hero-text { min-width: 0; }
-    .eyebrow { font-family: var(--mono); font-size: 8.5px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-muted); }
+    .eyebrow { font-family: var(--mono); font-size: 8.5px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-soft); }
     h1 { font-family: var(--rounded); font-size: 17px; margin: 1px 0 0; font-weight: 700; letter-spacing: -0.01em; line-height: 1.05; }
     .hero-actions { flex-shrink: 0; align-self: flex-start; display: flex; flex-direction: column; gap: 5px; margin-left: auto; }
     .hero-button {
