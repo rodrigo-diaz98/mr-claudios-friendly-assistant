@@ -20,11 +20,13 @@
     body.arrow-right { padding-right: 10px; }
     .popover {
       position: relative;
-      padding: 12px;
-      border-radius: 14px;
-      background: var(--surface);
-      border: 1px solid color-mix(in srgb, var(--c) 40%, var(--border));
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+      padding: 10px 12px 12px;
+      border-radius: 12px;
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.016) 1px, transparent 1px) 0 0 / 100% 3px,
+        var(--surface);
+      border: 1px solid color-mix(in srgb, var(--c) 45%, var(--border));
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.4);
       animation: pop-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
     body.arrow-right .popover { transform-origin: right center; }
@@ -36,46 +38,77 @@
       height: 14px;
       margin-top: -7px;
       background: var(--surface);
-      border: 1px solid color-mix(in srgb, var(--c) 40%, var(--border));
+      border: 1px solid color-mix(in srgb, var(--c) 45%, var(--border));
       transform: rotate(45deg);
     }
     body.arrow-right .arrow { right: -8px; border-left: 0; border-bottom: 0; }
     body.arrow-left .arrow { left: -8px; border-right: 0; border-top: 0; }
 
-    .pop-head { display: flex; align-items: center; gap: 8px; }
-    .title { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .pop-head .open-button { padding: 3px 8px 3px 9px; font-size: 11px; }
-    .close { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-muted); font-size: 15px; cursor: pointer; }
-    .close:hover { color: var(--text); background: var(--border); }
+    .pop-head { display: flex; align-items: center; gap: 8px; padding-bottom: 9px; border-bottom: 1px dashed var(--border); }
+    .title { flex: 1; min-width: 0; font-family: var(--rounded); font-size: 13.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .close { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; color: var(--text-muted); font-size: 14px; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+    .close:hover { color: var(--text); border-color: var(--text-muted); }
 
-    .who { margin-top: 10px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
-    .response { margin-top: 4px; padding: 9px 11px; border-radius: 10px; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border); font-size: 12px; line-height: 1.5; color: var(--text-soft); max-height: 220px; overflow: auto; overflow-wrap: anywhere; }
+    .who { margin-top: 10px; font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-muted); }
+    .who::before { content: '▸ '; color: var(--claude); }
+    .who::after { content: ' said'; }
+    .response {
+      margin-top: 6px;
+      padding: 14px 12px 10px;
+      border-radius: 0 0 6px 6px;
+      background: var(--paper);
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.5;
+      max-height: 220px;
+      overflow: auto;
+      overflow-wrap: anywhere;
+      -webkit-mask: radial-gradient(circle at 5px 0, transparent 3.2px, #000 3.6px) 0 0 / 10px 100% repeat-x;
+      box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+    }
+    .response::-webkit-scrollbar-thumb { background: rgba(42, 35, 27, 0.25); }
     .response p { margin: 0 0 6px; }
     .response p:last-child { margin: 0; }
-    .response code { font-family: var(--mono); font-size: 11px; background: var(--border); padding: 0 4px; border-radius: 4px; }
-    .response strong { color: var(--text); }
-    .response.empty { color: var(--text-muted); font-style: italic; }
+    .response code { font-family: var(--mono); font-size: 10.5px; background: rgba(42, 35, 27, 0.09); padding: 0 4px; border-radius: 3px; }
+    .response strong { color: #120e09; }
+    .response.empty { color: rgba(42, 35, 27, 0.55); font-style: italic; }
 
-    .question { font-weight: 600; font-size: 12.5px; margin: 10px 0 7px; }
-    .option { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 7px 10px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface-hover); color: var(--text); margin-bottom: 5px; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
-    .option:hover, .option.selected { border-color: color-mix(in srgb, var(--c) 60%, var(--border)); background: color-mix(in srgb, var(--c) 12%, var(--surface)); }
-    .option .key { flex-shrink: 0; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 5px; background: var(--border); font-family: var(--mono); font-size: 10px; color: var(--text-soft); }
+    .question { font-family: var(--rounded); font-weight: 700; font-size: 12.5px; margin: 12px 0 7px; }
+    .option { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 7px 10px 7px 7px; border-radius: 8px; border: 1px solid var(--border); background: var(--page); color: var(--text); margin-bottom: 5px; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+    .option:hover, .option.selected { border-color: var(--claude); background: color-mix(in srgb, var(--claude) 10%, var(--page)); }
+    .option .key {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--claude);
+      background:
+        linear-gradient(transparent calc(50% - 0.5px), rgba(0, 0, 0, 0.6) calc(50% - 0.5px), rgba(0, 0, 0, 0.6) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+        color-mix(in srgb, var(--claude) 16%, #0b0c0a);
+    }
+    .option.selected .key, .option:hover .key { color: var(--on-accent); background: var(--claude); }
     .option:disabled { opacity: 0.5; cursor: default; }
-    .option:disabled:hover { border-color: var(--border); background: var(--surface-hover); }
+    .option:disabled:hover { border-color: var(--border); background: var(--page); }
+    .option:disabled:hover .key { color: var(--claude); background: color-mix(in srgb, var(--claude) 16%, #0b0c0a); }
     .option .desc { display: block; font-size: 11px; font-weight: 400; color: var(--text-muted); margin-top: 1px; }
 
-    .composer { display: flex; gap: 6px; margin-top: 8px; align-items: flex-end; }
-    .composer textarea { flex: 1; resize: none; height: 34px; max-height: 96px; font: inherit; font-size: 12px; line-height: 16px; color: var(--text); background: var(--page); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; outline: none; }
-    .composer textarea:focus { border-color: color-mix(in srgb, var(--claude) 60%, var(--border)); }
+    .composer { display: flex; gap: 6px; margin-top: 10px; align-items: flex-end; }
+    .composer textarea { flex: 1; resize: none; height: 34px; max-height: 96px; font: inherit; font-size: 12px; line-height: 16px; color: var(--text); background: var(--page); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; outline: none; transition: border-color 0.15s; }
+    .composer textarea:focus { border-color: var(--claude); }
     .composer textarea::placeholder { color: var(--text-muted); }
     .composer textarea:disabled { opacity: 0.5; }
-    .send { flex-shrink: 0; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; font-size: 15px; font-weight: 700; background: var(--claude); color: var(--on-accent); border: 0; border-radius: 9px; cursor: pointer; }
-    .send:disabled { opacity: 0.4; cursor: default; }
-    .send-all { width: 100%; margin-top: 4px; padding: 7px 0; font: inherit; font-size: 12px; font-weight: 600; background: var(--claude); color: var(--on-accent); border: 0; border-radius: 9px; cursor: pointer; }
-    .send-all:disabled { opacity: 0.4; cursor: default; }
-    .hint { font-size: 10.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.4; }
-    .request { margin-top: 10px; font-family: var(--mono); font-size: 11px; background: var(--page); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; color: var(--text-soft); }
-    .wide-open { display: block; text-align: center; margin-top: 8px; padding: 7px 0; border-radius: 9px; background: var(--claude); color: var(--on-accent); font-size: 12px; font-weight: 600; text-decoration: none; }
+    .send { flex-shrink: 0; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; font-size: 15px; font-weight: 800; background: var(--claude); color: var(--on-accent); border: 0; border-radius: 8px; cursor: pointer; transition: transform 0.15s, opacity 0.15s; }
+    .send:not(:disabled):hover { transform: translateY(-1px); }
+    .send:disabled { opacity: 0.35; cursor: default; }
+    .send-all, .wide-open { display: block; width: 100%; margin-top: 6px; padding: 8px 0; text-align: center; font-family: var(--mono); font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; background: var(--claude); color: var(--on-accent); border: 0; border-radius: 8px; cursor: pointer; text-decoration: none; }
+    .send-all:disabled { opacity: 0.35; cursor: default; }
+    .hint { font-family: var(--mono); font-size: 9px; letter-spacing: 0.04em; color: var(--text-muted); margin-top: 7px; line-height: 1.5; }
+    .request { margin-top: 10px; font-family: var(--mono); font-size: 11px; background: var(--page); border: 1px solid var(--border); border-left: 3px solid var(--c); border-radius: 6px; padding: 8px 10px; color: var(--text); }
   </style>
 </head>
 <body class="arrow-right">
